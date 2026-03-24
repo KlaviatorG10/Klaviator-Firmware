@@ -1,0 +1,21 @@
+# --- Zephyr & nRF spesifikt ---
+# Dette er mappen der alle kompilerte filer havner (veldig stor!)
+build/
+
+# Zephyr-spesifikke filer som lastes ned lokalt
+.west/
+zephyr/
+modules/
+tools/
+
+# --- macOS spesifikt ---
+.DS_Store
+
+# --- Python & Toolchain ---
+__pycache__/
+*.py[cod]
+*$py.class
+
+# --- VS Code spesifikt ---
+.vscode/ipch/
+.vscode/compile_commands.json
