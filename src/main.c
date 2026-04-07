@@ -43,16 +43,18 @@ void serial_cb(const struct device *dev, void *user_data)
 
 	/* read until FIFO empty */
 	while (uart_fifo_read(uart_dev, &c, 1) == 1) {
-		if ((c == '\n' || c == '\r') && rx_buf_pos > 0) {
-			/* terminate string */
-			rx_buf[rx_buf_pos] = '\0';
+		if ((c == '\n' || c == '\r')) {
+			if (rx_buf_pos > 0) {
+				/* terminate string */
+				rx_buf[rx_buf_pos] = '\0';
 
-			/* if queue is full, message is silently dropped */
-			k_msgq_put(&uart_msgq, &rx_buf, K_NO_WAIT);
+				/* if queue is full, message is silently dropped */
+				k_msgq_put(&uart_msgq, &rx_buf, K_NO_WAIT);
 
-			/* reset the buffer (it was copied to the msgq) */
-			rx_buf_pos = 0;
-		} else if (c != '\n' && c != '\r') {
+				/* reset the buffer (it was copied to the msgq) */
+				rx_buf_pos = 0;
+			}
+		} else {
 			rx_buf[rx_buf_pos++] = c;
 			if (rx_buf_pos >= (MSG_SIZE - 1)) {
 				/* Drop data if buffer is full */
@@ -64,24 +66,12 @@ void serial_cb(const struct device *dev, void *user_data)
 
 void parse_message(char *msg)
 {
-	char state[10] = {0};
-	int note = 0;
-	int vel = 0;
-
-	/* Format expected: STATE:NOTE:VELOCITY */
-	char *token = strtok(msg, ":");
-	if (token == NULL) return;
-	strncpy(state, token, sizeof(state) - 1);
-
-	token = strtok(NULL, ":");
-	if (token == NULL) return;
-	note = atoi(token);
-
-	token = strtok(NULL, ":");
-	if (token == NULL) return;
-	vel = atoi(token);
-
-	printk("Mottatt - State: %s, Note: %d, Vel: %d\n", state, note, vel);
+	/* 
+	 * For maksimal ytelse og latency-måling: 
+	 * Vi sender bare meldingen rett tilbake (Echo).
+	 * Dette fjerner all tvil i Dashboardet om hvilken note som kom tilbake.
+	 */
+	printk("%s\n", msg);
 }
 
 int main(void)
@@ -89,7 +79,6 @@ int main(void)
 	char tx_buf[MSG_SIZE];
 
 	if (!device_is_ready(uart_dev)) {
-		printk("UART device not found!");
 		return 0;
 	}
 
@@ -97,20 +86,11 @@ int main(void)
 	int ret = uart_irq_callback_user_data_set(uart_dev, serial_cb, NULL);
 
 	if (ret < 0) {
-		if (ret == -ENOTSUP) {
-			printk("Interrupt-driven UART API support not enabled\n");
-		} else if (ret == -ENOSYS) {
-			printk("UART device does not support interrupt-driven API\n");
-		} else {
-			printk("Error setting UART callback: %d\n", ret);
-		}
 		return 0;
 	}
 	uart_irq_rx_enable(uart_dev);
 
-	printk("KLAVIATOR UART Nervesystem Klar.\n");
-	printk("Venter på data: STATE:NOTE:VELOCITY\\n\n");
-
+	/* Ingen lange velkomstmeldinger som kan forstyrre 1M baud oppstarten */
 	while (1) {
 		/* get a message from the queue */
 		if (k_msgq_get(&uart_msgq, &tx_buf, K_FOREVER) == 0) {
