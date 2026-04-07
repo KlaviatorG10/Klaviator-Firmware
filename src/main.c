@@ -10,9 +10,14 @@
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/uart.h>
+#include <zephyr/drivers/gpio.h>
 
 /* Change this if you have a different UART device node */
 #define UART_DEVICE_NODE DT_CHOSEN(zephyr_console)
+
+/* Solenoid definition from Device Tree alias */
+#define SOLENOID_NODE DT_ALIAS(solenoid)
+static const struct gpio_dt_spec solenoid = GPIO_DT_SPEC_GET(SOLENOID_NODE, gpios);
 
 #define MSG_SIZE 64
 
@@ -82,6 +87,15 @@ void parse_message(char *msg)
 	vel = atoi(token);
 
 	printk("Mottatt - State: %s, Note: %d, Vel: %d\n", state, note, vel);
+
+	/* Test the solenoid: turn ON if velocity > 0, OFF if velocity == 0 */
+	if (vel > 0) {
+		gpio_pin_set_dt(&solenoid, 1);
+		printk("Solenoid ON (Pin P0.13 HIGH)\n");
+	} else {
+		gpio_pin_set_dt(&solenoid, 0);
+		printk("Solenoid OFF (Pin P0.13 LOW)\n");
+	}
 }
 
 int main(void)
@@ -92,6 +106,13 @@ int main(void)
 		printk("UART device not found!");
 		return 0;
 	}
+
+	/* Initialize the solenoid GPIO */
+	if (!gpio_is_ready_dt(&solenoid)) {
+		printk("Error: Solenoid device not ready\n");
+		return 0;
+	}
+	gpio_pin_configure_dt(&solenoid, GPIO_OUTPUT_INACTIVE);
 
 	/* configure interrupt and callback to receive data */
 	int ret = uart_irq_callback_user_data_set(uart_dev, serial_cb, NULL);

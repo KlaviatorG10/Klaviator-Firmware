@@ -1,3 +1,18 @@
+/ {
+	solenoids {
+		compatible = "gpio-leds";
+		solenoid0: solenoid_0 {
+			/* Testing with Pin P0.13 */
+			gpios = <&gpio0 13 GPIO_ACTIVE_HIGH>;
+			label = "Solenoid 0";
+		};
+	};
+
+	aliases {
+		solenoid = &solenoid0;
+	};
+};
+
 &uart20 {
 	current-speed = <1000000>;
 };
