@@ -1,0 +1,7 @@
+default: Klaviator-Firmware
+build_dir: /Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA
+domains:
+  - name: Klaviator-Firmware
+    build_dir: /Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/Klaviator-Firmware
+flash_order:
+  - Klaviator-Firmware

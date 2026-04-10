@@ -49,18 +49,18 @@ void serial_cb(const struct device *dev, void *user_data)
 	/* read until FIFO empty */
 	while (uart_fifo_read(uart_dev, &c, 1) == 1) {
 		if ((c == '\n' || c == '\r') && rx_buf_pos > 0) {
-			
+			/* terminate string */
 			rx_buf[rx_buf_pos] = '\0';
 
-			
+			/* if queue is full, message is silently dropped */
 			k_msgq_put(&uart_msgq, &rx_buf, K_NO_WAIT);
 
-			
+			/* reset the buffer (it was copied to the msgq) */
 			rx_buf_pos = 0;
 		} else if (c != '\n' && c != '\r') {
 			rx_buf[rx_buf_pos++] = c;
 			if (rx_buf_pos >= (MSG_SIZE - 1)) {
-				
+				/* Drop data if buffer is full */
 				rx_buf_pos = 0;
 			}
 		}
@@ -91,18 +91,20 @@ void parse_message(char *msg)
 	/* Test the solenoid: turn ON if velocity > 0, OFF if velocity == 0 */
 	if (vel > 0) {
 		gpio_pin_set_dt(&solenoid, 1);
-		printk("Solenoid ON (LED0 turned ON)\n");
+		printk("Solenoid ON (Pin P0.13 HIGH)\n");
 	} else {
 		gpio_pin_set_dt(&solenoid, 0);
-		printk("Solenoid OFF (LED0 turned OFF)\n");
+		printk("Solenoid OFF (Pin P0.13 LOW)\n");
 	}
 }
 
 int main(void)
 {
+	char tx_buf[MSG_SIZE];
+
 	if (!device_is_ready(uart_dev)) {
-		printk("UART device not found!\n");
-		/* Don't return, let's keep going to test the solenoid/LED */
+		printk("UART device not found!");
+		return 0;
 	}
 
 	/* Initialize the solenoid GPIO */
@@ -123,24 +125,18 @@ int main(void)
 		} else {
 			printk("Error setting UART callback: %d\n", ret);
 		}
-		/* Continue anyway so we can test the LED/Solenoid loop! */
-	} else {
-		uart_irq_rx_enable(uart_dev);
+		return 0;
 	}
+	uart_irq_rx_enable(uart_dev);
 
-	printk("KLAVIATOR Hardware Test Mode.\n");
-	printk("Tester Solenoid på Pin P0.13 automatisk...\n");
+	printk("KLAVIATOR UART Nervesystem Klar.\n");
+	printk("Venter på data: STATE:NOTE:VELOCITY\\n\n");
 
 	while (1) {
-		/* Turn Solenoid ON */
-		gpio_pin_set_dt(&solenoid, 1);
-		printk("Solenoid ON (P0.13 HIGH)\n");
-		k_msleep(1000); /* Wait 1 second */
-
-		/* Turn Solenoid OFF */
-		gpio_pin_set_dt(&solenoid, 0);
-		printk("Solenoid OFF (P0.13 LOW)\n");
-		k_msleep(1000); /* Wait 1 second */
+		/* get a message from the queue */
+		if (k_msgq_get(&uart_msgq, &tx_buf, K_FOREVER) == 0) {
+			parse_message(tx_buf);
+		}
 	}
 
 	return 0;

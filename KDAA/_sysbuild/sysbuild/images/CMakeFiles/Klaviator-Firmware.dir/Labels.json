@@ -1,0 +1,43 @@
+{
+	"sources" : 
+	[
+		{
+			"file" : "/Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/_sysbuild/sysbuild/images/CMakeFiles/Klaviator-Firmware"
+		},
+		{
+			"file" : "/Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/_sysbuild/sysbuild/images/CMakeFiles/Klaviator-Firmware.rule"
+		},
+		{
+			"file" : "/Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/_sysbuild/sysbuild/images/CMakeFiles/Klaviator-Firmware-complete.rule"
+		},
+		{
+			"file" : "/Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/_sysbuild/sysbuild/images/Klaviator-Firmware-prefix/src/Klaviator-Firmware-stamp/Klaviator-Firmware-build.rule"
+		},
+		{
+			"file" : "/Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/_sysbuild/sysbuild/images/Klaviator-Firmware-prefix/src/Klaviator-Firmware-stamp/Klaviator-Firmware-configure.rule"
+		},
+		{
+			"file" : "/Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/_sysbuild/sysbuild/images/Klaviator-Firmware-prefix/src/Klaviator-Firmware-stamp/Klaviator-Firmware-download.rule"
+		},
+		{
+			"file" : "/Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/_sysbuild/sysbuild/images/Klaviator-Firmware-prefix/src/Klaviator-Firmware-stamp/Klaviator-Firmware-install.rule"
+		},
+		{
+			"file" : "/Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/_sysbuild/sysbuild/images/Klaviator-Firmware-prefix/src/Klaviator-Firmware-stamp/Klaviator-Firmware-mkdir.rule"
+		},
+		{
+			"file" : "/Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/_sysbuild/sysbuild/images/Klaviator-Firmware-prefix/src/Klaviator-Firmware-stamp/Klaviator-Firmware-patch.rule"
+		},
+		{
+			"file" : "/Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/_sysbuild/sysbuild/images/Klaviator-Firmware-prefix/src/Klaviator-Firmware-stamp/Klaviator-Firmware-update.rule"
+		}
+	],
+	"target" : 
+	{
+		"labels" : 
+		[
+			"Klaviator-Firmware"
+		],
+		"name" : "Klaviator-Firmware"
+	}
+}
