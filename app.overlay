@@ -1,18 +1,31 @@
 / {
-	solenoids {
-		compatible = "gpio-leds";
-		solenoid0: solenoid_0 {
-			/* Testing with Pin P0.13 */
-			gpios = <&gpio0 13 GPIO_ACTIVE_HIGH>;
-			label = "Solenoid 0";
-		};
-	};
-
 	aliases {
-		solenoid = &solenoid0;
+		pwm-solenoid = &pwm20;
 	};
 };
 
+/* Configure PWM20 with all 4 channels */
+&pwm20 {
+	status = "okay";
+	pinctrl-0 = <&pwm20_default>;
+	pinctrl-names = "default";
+};
+
+/* Pin configuration */
+&pinctrl {
+	/* 4 PWM outputs - each controls 4 solenoids via time multiplexing */
+	pwm20_default: pwm20_default {
+		group1 {
+			psels = <NRF_PSEL(PWM_OUT0, 0, 1)>,   /* PWM Channel 0 → Solenoids 0,1,2,3 */
+			        <NRF_PSEL(PWM_OUT1, 0, 2)>,   /* PWM Channel 1 → Solenoids 4,5,6,7 */
+			        <NRF_PSEL(PWM_OUT2, 0, 3)>,   /* PWM Channel 2 → Solenoids 8,9,10,11 */
+			        <NRF_PSEL(PWM_OUT3, 0, 4)>;   /* PWM Channel 3 → Solenoids 12,13,14,15 */
+		};
+	};
+};
+
+/* UART configuration */
 &uart20 {
+	status = "okay";
 	current-speed = <1000000>;
 };
