@@ -45,13 +45,22 @@
 // Base MIDI note (Middle C)
 #define BASE_MIDI_NOTE 60
 
-// PWM frequency (5 kHz for silent operation)
-#define PWM_FREQUENCY_HZ 5000
-#define PWM_PERIOD_USEC (1000000 / PWM_FREQUENCY_HZ)  // 200µs
+// PWM frequency (25 kHz - above audible range for silent operation)
+#define PWM_FREQUENCY_HZ 25000
+#define PWM_PERIOD_USEC (1000000 / PWM_FREQUENCY_HZ)  // 40µs
 
 // Time multiplexing speed (how fast we switch between groups)
 #define MULTIPLEX_FREQUENCY_HZ 200  // Switch every 5ms
 #define MULTIPLEX_PERIOD_MS (1000 / MULTIPLEX_FREQUENCY_HZ)
+
+// Kick + Hold timing (for efficient solenoid strikes)
+// Count in multiplex CYCLES, not milliseconds (more reliable than time-based)
+#define KICK_CYCLES 1           // Number of multiplex cycles at full power (1-2 recommended)
+#define HOLD_POWER_PERCENT 60   // Holding power as % of requested velocity
+
+// Auto-release safety timer
+#define MAX_SOLENOID_ON_TIME_MS 2000  // Maximum time a solenoid can stay on (2 seconds)
+#define ENABLE_AUTO_RELEASE 1          // Set to 1 to enable auto-release safety feature
 
 /* ═══════════════════════════════════════════════════════════════════
  * HARDWARE DEFINITIONS
@@ -79,6 +88,8 @@ struct Solenoid {
     bool is_active;            // Should this solenoid be energized?
     uint8_t pwm_channel;       // Which PWM channel controls this solenoid (0-3)
     uint8_t position_in_group; // Which position within the group (0-3)
+    uint16_t cycles_active;    // How many multiplex cycles this solenoid has been active
+    bool in_kick_phase;        // True during initial kick, false during hold
 };
 
 // Array holding state of all 16 solenoids
@@ -105,7 +116,12 @@ static int rx_buf_pos;
 
 /**
  * Convert MIDI velocity (0-127) to PWM pulse width
- * 
+ *
+ * Uses a non-linear curve for piano-like dynamics:
+ * - Minimum threshold ensures weak notes still activate
+ * - Quadratic curve provides better expression and dynamic range
+ * - More noticeable difference between soft, medium, and loud
+ *
  * @param velocity MIDI velocity value (0 = off, 127 = maximum power)
  * @return PWM pulse width in microseconds
  */
@@ -118,8 +134,28 @@ static uint32_t velocity_to_pwm_pulse(uint8_t velocity)
         return PWM_USEC(PWM_PERIOD_USEC);  // Full power
     }
     
-    // Linear scaling: velocity / 127 = pulse / period
-    return PWM_USEC((velocity * PWM_PERIOD_USEC) / 127);
+    // Piano-like velocity curve with better dynamics
+    // Min PWM: 25% (ensures soft notes work)
+    // Max PWM: 100% (full power)
+    // Curve: Quadratic (velocity²) for expressive dynamics
+    
+    #define MIN_PWM_PERCENT 25  // Minimum PWM for weakest note
+    #define MAX_PWM_PERCENT 100 // Maximum PWM for strongest note
+    
+    // Normalize velocity to 0.0 - 1.0 range
+    float vel_normalized = (float)velocity / 127.0f;
+    
+    // Apply quadratic curve for better feel
+    // This makes soft notes softer and creates more dynamic range
+    float vel_curved = vel_normalized * vel_normalized;
+    
+    // Map to PWM range (25% - 100%)
+    float pwm_percent = MIN_PWM_PERCENT + (vel_curved * (MAX_PWM_PERCENT - MIN_PWM_PERCENT));
+    
+    // Convert percentage to pulse width
+    uint32_t pulse_usec = (uint32_t)((pwm_percent * PWM_PERIOD_USEC) / 100.0f);
+    
+    return PWM_USEC(pulse_usec);
 }
 
 /**
@@ -184,6 +220,8 @@ static void initialize_solenoid_data(void)
         solenoids[i].is_active = false;
         solenoids[i].pwm_channel = get_pwm_channel_for_solenoid(i);
         solenoids[i].position_in_group = get_position_in_group(i);
+        solenoids[i].cycles_active = 0;
+        solenoids[i].in_kick_phase = false;
         
         printk("  Solenoid %2d: PWM Ch %d, Position %d, Note %3d (%s)\n",
                i,
@@ -288,10 +326,15 @@ static void set_enable_pins_for_group(uint8_t group_number)
 
 /**
  * Update PWM outputs for all channels based on current multiplex group
- * 
+ *
  * This function looks at which solenoids should be active in the current
  * group, and sets the PWM outputs accordingly.
- * 
+ *
+ * Implements "Kick + Hold" logic:
+ * - Initial KICK_DURATION_MS: Full power for strong strike
+ * - After kick: Reduced power (HOLD_POWER_PERCENT) for efficient holding
+ * - Auto-release: Automatically turns off solenoids after MAX_SOLENOID_ON_TIME_MS
+ *
  * @param group_number Current group being activated (0-3)
  */
 static void update_pwm_for_current_group(uint8_t group_number)
@@ -303,9 +346,52 @@ static void update_pwm_for_current_group(uint8_t group_number)
         
         // Is this solenoid supposed to be active?
         if (solenoids[solenoid_num].is_active) {
-            // Yes! Set PWM to the desired power level
+            // Increment cycle counter for this solenoid
+            solenoids[solenoid_num].cycles_active++;
+            
+            #if ENABLE_AUTO_RELEASE
+            // SAFETY: Auto-release if solenoid has been on too long
+            // Convert cycles to approximate milliseconds for safety check
+            uint32_t time_active_ms = solenoids[solenoid_num].cycles_active * MULTIPLEX_PERIOD_MS;
+            if (time_active_ms >= MAX_SOLENOID_ON_TIME_MS) {
+                printk("⚠️  AUTO-RELEASE: Solenoid %2d (%s) turned off after %d cycles (%d ms)\n",
+                       solenoid_num,
+                       get_note_name(solenoid_num),
+                       solenoids[solenoid_num].cycles_active,
+                       time_active_ms);
+                solenoids[solenoid_num].is_active = false;
+                solenoids[solenoid_num].velocity = 0;
+                solenoids[solenoid_num].cycles_active = 0;
+                // Fall through to normal PWM off logic below
+            }
+            #endif
+            
+            // Re-check active state (may have been cleared by auto-release)
+            if (!solenoids[solenoid_num].is_active) {
+                // Solenoid should be off
+                uint32_t period = PWM_USEC(PWM_PERIOD_USEC);
+                pwm_set(pwm_device, pwm_ch, period, 0, 0);
+                continue;
+            }
+            
+            // Determine velocity based on kick vs hold phase (cycle-based)
+            // KICK: Always use FULL POWER (127) for reliable activation
+            // HOLD: Use requested velocity scaled by HOLD_POWER_PERCENT
+            uint8_t effective_velocity;
+            
+            if (solenoids[solenoid_num].cycles_active <= KICK_CYCLES) {
+                // KICK PHASE: Use FULL POWER (127) for reliable activation
+                effective_velocity = 127;
+                solenoids[solenoid_num].in_kick_phase = true;
+            } else {
+                // HOLD PHASE: Use requested velocity scaled by hold percentage
+                effective_velocity = (solenoids[solenoid_num].velocity * HOLD_POWER_PERCENT) / 100;
+                solenoids[solenoid_num].in_kick_phase = false;
+            }
+            
+            // Set PWM to the calculated power level
             uint32_t period = PWM_USEC(PWM_PERIOD_USEC);
-            uint32_t pulse = velocity_to_pwm_pulse(solenoids[solenoid_num].velocity);
+            uint32_t pulse = velocity_to_pwm_pulse(effective_velocity);
             pwm_set(pwm_device, pwm_ch, period, pulse, 0);
         } else {
             // No, this solenoid should be off
@@ -360,11 +446,19 @@ void activate_solenoid(uint8_t solenoid_number, uint8_t velocity)
     solenoids[solenoid_number].velocity = velocity;
     solenoids[solenoid_number].is_active = (velocity > 0);
     
+    // Initialize cycle counter for kick+hold logic
+    if (velocity > 0) {
+        solenoids[solenoid_number].cycles_active = 0;
+        solenoids[solenoid_number].in_kick_phase = true;
+    } else {
+        solenoids[solenoid_number].cycles_active = 0;
+    }
+    
     // Calculate power percentage for display
     int power_percent = (velocity * 100) / 127;
     
     if (velocity > 0) {
-        printk("🎹 Solenoid %2d (%s) ON  - Power: %3d%% (velocity %d)\n",
+        printk("🎹 Solenoid %2d (%s) ON  - Power: %3d%% (velocity %d) [KICK+HOLD]\n",
                solenoid_number,
                get_note_name(solenoid_number),
                power_percent,
