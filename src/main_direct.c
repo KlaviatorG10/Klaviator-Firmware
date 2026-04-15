@@ -24,7 +24,8 @@
  * CONFIGURATION SETTINGS
  * =============================================================================== */
 
-#define ENABLE_UART_MODE        1
+#define ENABLE_UART_MODE        0
+#define SAFE_TEST_MODE          1  /* Test mode: print instead of activating solenoids */
 
 #define TOTAL_SOLENOIDS         16
 #define BASE_MIDI_NOTE          60
@@ -69,6 +70,125 @@ void sync_clock(void)
 }
 
 /* ===============================================================================
+ * EVENT SYSTEM - Inline Implementation
+ * =============================================================================== */
+
+/* Event types */
+typedef enum {
+    EVENT_SYNC,      /* Synchronize clock to T=0 */
+    EVENT_STOP,      /* Emergency stop - deactivate all solenoids */
+    EVENT_MOVE,      /* Prepare solenoid (future: for coordinated moves) */
+    EVENT_STRIKE     /* Activate solenoid with velocity and duration */
+} event_type_t;
+
+/* Event structure */
+typedef struct {
+    event_type_t type;           /* Event type */
+    uint32_t target_time_ms;     /* When to execute (synchronized time) */
+    
+    /* Solenoid control data */
+    uint8_t solenoid_number;     /* Which solenoid (0-15) */
+    uint8_t velocity;            /* Velocity (0-127, 0 = release) */
+    uint16_t duration_ms;        /* How long to stay on */
+    
+    /* Metadata */
+    uint16_t sequence_number;    /* For tracking/debugging */
+    uint8_t hand;                /* Hand/group identifier (0 or 1) */
+} kdaa_event_t;
+
+/* Circular event buffer */
+#define EVENT_BUFFER_SIZE 256
+
+typedef struct {
+    kdaa_event_t events[EVENT_BUFFER_SIZE];
+    volatile uint16_t write_index;
+    volatile uint16_t read_index;
+    volatile uint16_t count;
+    uint32_t total_added;
+    uint32_t total_executed;
+    uint32_t overflow_count;
+} event_buffer_t;
+
+/* Mutex for thread-safe buffer access */
+static K_MUTEX_DEFINE(event_buffer_mutex);
+
+/* Buffer management functions */
+static void init_event_buffer(event_buffer_t *buffer)
+{
+    memset(buffer, 0, sizeof(event_buffer_t));
+    buffer->write_index = 0;
+    buffer->read_index = 0;
+    buffer->count = 0;
+    buffer->total_added = 0;
+    buffer->total_executed = 0;
+    buffer->overflow_count = 0;
+}
+
+static bool add_event_to_buffer(event_buffer_t *buffer, const kdaa_event_t *event)
+{
+    k_mutex_lock(&event_buffer_mutex, K_FOREVER);
+    
+    if (buffer->count >= EVENT_BUFFER_SIZE) {
+        buffer->overflow_count++;
+        k_mutex_unlock(&event_buffer_mutex);
+        return false;
+    }
+    
+    buffer->events[buffer->write_index] = *event;
+    buffer->write_index = (buffer->write_index + 1) & (EVENT_BUFFER_SIZE - 1);
+    buffer->count++;
+    buffer->total_added++;
+    
+    k_mutex_unlock(&event_buffer_mutex);
+    return true;
+}
+
+static bool get_next_event(event_buffer_t *buffer, kdaa_event_t *event)
+{
+    k_mutex_lock(&event_buffer_mutex, K_FOREVER);
+    
+    if (buffer->count == 0) {
+        k_mutex_unlock(&event_buffer_mutex);
+        return false;
+    }
+    
+    *event = buffer->events[buffer->read_index];
+    buffer->read_index = (buffer->read_index + 1) & (EVENT_BUFFER_SIZE - 1);
+    buffer->count--;
+    buffer->total_executed++;
+    
+    k_mutex_unlock(&event_buffer_mutex);
+    return true;
+}
+
+static bool peek_next_event(const event_buffer_t *buffer, kdaa_event_t *event)
+{
+    k_mutex_lock(&event_buffer_mutex, K_FOREVER);
+    
+    if (buffer->count == 0) {
+        k_mutex_unlock(&event_buffer_mutex);
+        return false;
+    }
+    
+    *event = buffer->events[buffer->read_index];
+    
+    k_mutex_unlock(&event_buffer_mutex);
+    return true;
+}
+
+static void clear_event_buffer(event_buffer_t *buffer)
+{
+    k_mutex_lock(&event_buffer_mutex, K_FOREVER);
+    
+    buffer->write_index = 0;
+    buffer->read_index = 0;
+    buffer->count = 0;
+    memset(buffer->events, 0, sizeof(buffer->events));
+    
+    k_mutex_unlock(&event_buffer_mutex);
+}
+
+/* ===============================================================================
  * DATA STRUCTURES
  * =============================================================================== */
 
@@ -87,6 +207,18 @@ struct Solenoid {
 };
 
 static struct Solenoid solenoids[TOTAL_SOLENOIDS];
+
+/* ===============================================================================
+ * EVENT SYSTEM & SEQUENCER THREAD
+ * =============================================================================== */
+
+static event_buffer_t event_buffer;
+
+#define SEQUENCER_STACK_SIZE 4096
+#define SEQUENCER_PRIORITY K_PRIO_COOP(1)  /* Highest cooperative priority */
+
+K_THREAD_STACK_DEFINE(sequencer_stack, SEQUENCER_STACK_SIZE);
+static struct k_thread sequencer_thread_data;
 
 /* ===============================================================================
  * UART COMMUNICATION
@@ -214,6 +346,13 @@ void activate_solenoid(uint8_t solenoid_number, uint8_t velocity, uint32_t durat
         sol->duration_target_ms = duration_ms;
         sol->activation_time = get_sync_time();
         
+        #if SAFE_TEST_MODE
+        /* SAFE MODE: Print only, no hardware activation */
+        const char *type = (solenoid_number < NUM_PWM_CHANNELS) ? "PWM" : "GPIO";
+        printk("[SAFE-ACTIVATE-%s] Sol:%2d | Vel:%3d | Dur:%4dms | T:%6u (SIMULATED)\n",
+               type, solenoid_number, velocity, duration_ms, sol->activation_time);
+        #else
+        /* PRODUCTION MODE: Actually activate hardware */
         if (solenoid_number < NUM_PWM_CHANNELS) {
             /* PWM control (solenoids 0-3) with KICK phase */
             sol->in_kick_phase = true;
@@ -234,6 +373,7 @@ void activate_solenoid(uint8_t solenoid_number, uint8_t velocity, uint32_t durat
             printk("[ON-GPIO] Sol:%2d | Pin:P1.%02d | Dur:%4dms | T:%6u\n",
                    solenoid_number, sol->pin, duration_ms, sol->activation_time);
         }
+        #endif
     } else {
         /* RELEASE */
         sol->velocity = 0;
@@ -241,6 +381,13 @@ void activate_solenoid(uint8_t solenoid_number, uint8_t velocity, uint32_t durat
         sol->in_kick_phase = false;
         sol->duration_target_ms = 0;
         
+        #if SAFE_TEST_MODE
+        /* SAFE MODE: Print only */
+        const char *type = (solenoid_number < NUM_PWM_CHANNELS) ? "PWM" : "GPIO";
+        printk("[SAFE-RELEASE-%s] Sol:%2d | T:%6u (SIMULATED)\n",
+               type, solenoid_number, get_sync_time());
+        #else
+        /* PRODUCTION MODE: Actually deactivate hardware */
         if (solenoid_number < NUM_PWM_CHANNELS) {
             /* PWM OFF */
             uint32_t period = PWM_NSEC(PWM_PERIOD_USEC * 1000);
@@ -253,6 +400,7 @@ void activate_solenoid(uint8_t solenoid_number, uint8_t velocity, uint32_t durat
         const char *type = (solenoid_number < NUM_PWM_CHANNELS) ? "PWM" : "GPIO";
         printk("[RELEASE-%s] Sol:%2d | Pin:P1.%02d | T:%6u\n",
                type, solenoid_number, sol->pin, get_sync_time());
+        #endif
     }
 }
 
@@ -289,13 +437,16 @@ void control_timer_handler(struct k_timer *timer)
                 /* Transition to HOLD phase */
                 sol->in_kick_phase = false;
                 
+                #if !SAFE_TEST_MODE
+                /* PRODUCTION MODE: Set PWM to hold level */
                 uint32_t pulse = velocity_to_pwm_pulse(sol->velocity);
                 uint32_t period = PWM_NSEC(PWM_PERIOD_USEC * 1000);
                 pwm_set(pwm_device, sol->pin, period, pulse, 0);
+                #endif
                 
                 int duty_percent = (sol->velocity * 100) / 127;
-                printk("[HOLD-PWM] Sol:%2d | Pin:P1.%02d | Duty:%3d%% | T:%6u\n",
-                       i, sol->pin, duty_percent, now);
+                printk("[HOLD-PWM] Sol:%2d | Pin:P1.%02d | Duty:%3d%% | T:%6u%s\n",
+                       i, sol->pin, duty_percent, now, SAFE_TEST_MODE ? " (SIMULATED)" : "");
             }
         }
         
@@ -304,8 +455,8 @@ void control_timer_handler(struct k_timer *timer)
             uint32_t active_time = now - sol->activation_time;
             if (active_time >= sol->duration_target_ms) {
                 const char *type = (i < NUM_PWM_CHANNELS) ? "PWM" : "GPIO";
-                printk("[AUTO-REL-%s] Sol:%2d | Dur:%4dms | T:%6u\n",
-                       type, i, sol->duration_target_ms, now);
+                printk("[AUTO-REL-%s] Sol:%2d | Dur:%4dms | T:%6u%s\n",
+                       type, i, sol->duration_target_ms, now, SAFE_TEST_MODE ? " (SIMULATED)" : "");
                 deactivate_solenoid(i);
             }
         }
@@ -313,6 +464,109 @@ void control_timer_handler(struct k_timer *timer)
 }
 
 K_TIMER_DEFINE(control_timer, control_timer_handler, NULL);
+
+/* ===============================================================================
+ * SEQUENCER THREAD - Deterministic Event Executor
+ * =============================================================================== */
+
+void sequencer_loop(void *arg1, void *arg2, void *arg3)
+{
+    kdaa_event_t event;
+    uint32_t events_executed = 0;
+    
+    printk("[SEQUENCER] Thread started (Priority: %d, Poll: 0.5ms)\n", SEQUENCER_PRIORITY);
+    
+    while (1) {
+        /* Get current synchronized time */
+        uint32_t now = get_sync_time();
+        
+        /* Check if there are events ready to execute */
+        while (peek_next_event(&event_buffer, &event)) {
+            /* Check if this event is due */
+            if (now >= event.target_time_ms) {
+                /* Remove event from buffer */
+                get_next_event(&event_buffer, &event);
+                
+                /* ============================================================
+                 * UTFØR HANDLING (EXECUTE ACTION)
+                 * ============================================================ */
+                
+                switch (event.type) {
+                    case EVENT_STRIKE: {
+                        /* Calculate solenoid number */
+                        int solenoid = event.solenoid_number;
+                        
+                        /* Validate solenoid number */
+                        if (solenoid >= 0 && solenoid < TOTAL_SOLENOIDS) {
+                            /* Execute strike */
+                            activate_solenoid(solenoid, event.velocity, event.duration_ms);
+                            
+                            /* Log execution */
+                            printk("[EXEC] STRIKE #%u | Sol:%2d | Vel:%3d | Dur:%4dms | T:%6u (actual:%6u, Δ%d)\n",
+                                   event.sequence_number,
+                                   solenoid,
+                                   event.velocity,
+                                   event.duration_ms,
+                                   event.target_time_ms,
+                                   now,
+                                   (int)(now - event.target_time_ms));
+                        } else {
+                            printk("[ERROR] Invalid solenoid number: %d\n", solenoid);
+                        }
+                        break;
+                    }
+                    
+                    case EVENT_MOVE: {
+                        /* Future: Coordinated hand/arm movements */
+                        printk("[EXEC] MOVE #%u | Hand:%d → Pos:%d at T:%u\n",
+                               event.sequence_number,
+                               event.hand,
+                               event.solenoid_number,
+                               event.target_time_ms);
+                        break;
+                    }
+                    
+                    case EVENT_STOP: {
+                        /* Emergency stop */
+                        printk("[EXEC] STOP #%u | Emergency stop at T:%u\n",
+                               event.sequence_number,
+                               now);
+                        
+                        /* Clear all pending events */
+                        clear_event_buffer(&event_buffer);
+                        
+                        /* Deactivate all solenoids */
+                        deactivate_all_solenoids();
+                        break;
+                    }
+                    
+                    case EVENT_SYNC: {
+                        /* Synchronize clock to T=0 */
+                        printk("[EXEC] SYNC #%u | Clock reset at T:%u\n",
+                               event.sequence_number,
+                               now);
+                        
+                        sync_clock();
+                        break;
+                    }
+                    
+                    default:
+                        printk("[ERROR] Unknown event type: %d\n", event.type);
+                        break;
+                }
+                
+                events_executed++;
+                
+            } else {
+                /* Next event is not due yet, stop checking */
+                break;
+            }
+        }
+        
+        /* Poll every 0.5ms for low jitter (500 microseconds) */
+        k_usleep(500);
+    }
+}
 
 /* ===============================================================================
  * UART COMMUNICATION - KDAA V4.0 Protocol
@@ -407,6 +661,49 @@ void parse_kdaa_cmd(char *msg)
 #endif
 
 /* ===============================================================================
+ * DETERMINISTIC TEST FUNCTION
+ * =============================================================================== */
+
+void run_deterministic_test(void)
+{
+    printk("\n");
+    printk("╔═══════════════════════════════════════════════════════╗\n");
+    printk("║  DETERMINISTIC SEQUENCER TEST                        ║\n");
+    printk("╚═══════════════════════════════════════════════════════╝\n");
+    printk("\n");
+    
+    /* Create test events - nicely spaced for clear timing observation */
+    kdaa_event_t events[] = {
+        { .type = EVENT_STRIKE, .target_time_ms = 1500, .solenoid_number = 0, .velocity = 100, .duration_ms = 200, .sequence_number = 1, .hand = 0 },
+        { .type = EVENT_MOVE,   .target_time_ms = 2500, .solenoid_number = 0, .velocity = 0,   .duration_ms = 0,   .sequence_number = 2, .hand = 0 },
+        { .type = EVENT_STRIKE, .target_time_ms = 3500, .solenoid_number = 1, .velocity = 80,  .duration_ms = 150, .sequence_number = 3, .hand = 0 },
+        { .type = EVENT_STRIKE, .target_time_ms = 5000, .solenoid_number = 2, .velocity = 120, .duration_ms = 180, .sequence_number = 4, .hand = 0 },
+        { .type = EVENT_STRIKE, .target_time_ms = 6500, .solenoid_number = 4, .velocity = 90,  .duration_ms = 200, .sequence_number = 5, .hand = 0 },
+        { .type = EVENT_STOP,   .target_time_ms = 9000, .solenoid_number = 0, .velocity = 0,   .duration_ms = 0,   .sequence_number = 6, .hand = 0 }
+    };
+    
+    int num_events = sizeof(events) / sizeof(events[0]);
+    
+    printk("[TEST] Adding %d timed events to buffer...\n", num_events);
+    
+    for (int i = 0; i < num_events; i++) {
+        if (add_event_to_buffer(&event_buffer, &events[i])) {
+            printk("[TEST] Event #%d added: T=%u, Sol=%d, Vel=%d, Dur=%dms\n",
+                   events[i].sequence_number,
+                   events[i].target_time_ms,
+                   events[i].solenoid_number,
+                   events[i].velocity,
+                   events[i].duration_ms);
+        } else {
+            printk("[ERROR] Failed to add event #%d - buffer full!\n", i);
+        }
+    }
+    
+    printk("[TEST] %d events queued. Sequencer will execute at precise times.\n", num_events);
+    printk("[TEST] Watch for [EXEC] messages showing timing accuracy (Δ)\n\n");
+}
+
+/* ===============================================================================
  * MAIN
  * =============================================================================== */
 
@@ -418,10 +715,19 @@ int main(void)
     printk("║  PWM (0-3) + GPIO (4-15) | Kick-Hold | Duration      ║\n");
     printk("╚═══════════════════════════════════════════════════════╝\n");
     printk("\n");
+    printk("[HEARTBEAT] System starting...\n");
+    k_msleep(100);  /* Give console time to initialize */
 
-    if (initialize_pwm() < 0 || initialize_gpio() < 0) {
-        printk("[ERROR] Hardware initialization failed!\n");
-        return -1;
+    printk("[INIT] Checking PWM device readiness...\n");
+    if (initialize_pwm() < 0) {
+        printk("[ERROR] PWM initialization failed!\n");
+        printk("[FALLBACK] Continuing without PWM...\n");
+    }
+    
+    printk("[INIT] Checking GPIO device readiness...\n");
+    if (initialize_gpio() < 0) {
+        printk("[ERROR] GPIO initialization failed!\n");
+        printk("[FALLBACK] Continuing without GPIO...\n");
     }
 
     initialize_solenoid_data();
@@ -434,7 +740,33 @@ int main(void)
     printk("[INIT] Kick duration: %dms\n", KICK_DURATION_MS);
     k_timer_start(&control_timer, K_MSEC(TIMER_PERIOD_MS), K_MSEC(TIMER_PERIOD_MS));
 
+    /* Initialize event buffer */
+    printk("[INIT] Initializing event buffer...\n");
+    init_event_buffer(&event_buffer);
+    printk("[INIT] Event buffer ready (capacity: %d events)\n", EVENT_BUFFER_SIZE);
+
+    /* Create and start sequencer thread */
+    printk("[INIT] Starting high-priority sequencer thread...\n");
+    k_thread_create(&sequencer_thread_data,
+                    sequencer_stack,
+                    K_THREAD_STACK_SIZEOF(sequencer_stack),
+                    sequencer_loop,
+                    NULL, NULL, NULL,
+                    SEQUENCER_PRIORITY,
+                    0,  /* No options */
+                    K_NO_WAIT);  /* Start immediately */
+    
+    k_thread_name_set(&sequencer_thread_data, "sequencer");
+    printk("[INIT] Sequencer thread started (Priority: %d)\n", SEQUENCER_PRIORITY);
+
+    #if SAFE_TEST_MODE
+    printk("\n[SAFE_TEST_MODE] Hardware activation DISABLED - prints only\n\n");
+    #endif
+
     printk("[READY] System ready\n\n");
+
+    /* Run deterministic test */
+    run_deterministic_test();
 
     #if ENABLE_UART_MODE
     printk("╔═══════════════════════════════════════════════════════╗\n");
@@ -456,25 +788,49 @@ int main(void)
            BASE_MIDI_NOTE, BASE_MIDI_NOTE + TOTAL_SOLENOIDS - 1);
     printk("Valid velocity: 0-127\n\n");
     
+    printk("[INIT] Checking UART device readiness...\n");
     if (!device_is_ready(uart_dev)) {
-        printk("[ERROR] UART not ready\n");
-        return -1;
+        printk("[ERROR] UART device not ready - Name: %s\n", uart_dev->name);
+        printk("[FALLBACK] Running in polling mode with heartbeat\n");
+        
+        /* Heartbeat loop if UART fails */
+        uint32_t count = 0;
+        while (1) {
+            printk("[HEARTBEAT] Alive - count: %u\n", count++);
+            k_msleep(1000);
+        }
     }
     
+    printk("[UART] Setting up interrupt-driven UART...\n");
     uart_irq_callback_user_data_set(uart_dev, serial_cb, NULL);
     uart_irq_rx_enable(uart_dev);
+    printk("[UART] Interrupt mode enabled\n");
     
     char msg_buf[MSG_SIZE];
+    uint32_t heartbeat_counter = 0;
     while (1) {
-        if (k_msgq_get(&uart_msgq, &msg_buf, K_FOREVER) == 0) {
+        /* Non-blocking message check with timeout */
+        if (k_msgq_get(&uart_msgq, &msg_buf, K_MSEC(1000)) == 0) {
             parse_kdaa_cmd(msg_buf);
+        } else {
+            /* Heartbeat every second if no messages */
+            printk("[HEARTBEAT] Waiting for commands... (%u)\n", heartbeat_counter++);
         }
     }
     
     #else
-    printk("UART mode disabled. System idle.\n");
+    printk("\n");
+    printk("╔═══════════════════════════════════════════════════════╗\n");
+    printk("║  UART mode disabled - Console output only           ║\n");
+    printk("╚═══════════════════════════════════════════════════════╝\n");
+    printk("\n");
+    
+    uint32_t heartbeat = 0;
+    printk("[IDLE] Entering heartbeat loop...\n");
+    
     while (1) {
-        k_msleep(1000);
+        printk("[HEARTBEAT] System alive - count: %u\n", heartbeat++);
+        k_msleep(1000);  /* Heartbeat every second */
     }
     #endif
 

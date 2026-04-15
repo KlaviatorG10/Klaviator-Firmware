@@ -1,9 +1,41 @@
 /* PWM20 and UART configuration for nRF54L15 */
 
+/ {
+    chosen {
+        zephyr,console = &uart20;
+        zephyr,shell-uart = &uart20;
+    };
+};
+
+/* Disable conflicting peripherals that use P1.13 and P1.14 */
+&button0 {
+    status = "disabled";
+};
+
+&button1 {
+    status = "disabled";
+};
+
+&led0 {
+    status = "disabled";
+};
+
+&led1 {
+    status = "disabled";
+};
+
+&led2 {
+    status = "disabled";
+};
+
+&led3 {
+    status = "disabled";
+};
+
 /* UART for console/serial output - connected to J-Link USB CDC */
 &uart20 {
     status = "okay";
-    current-speed = <1000000>;  /* 1 Mbaud */
+    current-speed = <115200>;  /* Standard baud rate */
     pinctrl-0 = <&uart20_default>;
     pinctrl-1 = <&uart20_sleep>;
     pinctrl-names = "default", "sleep";
