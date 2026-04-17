@@ -24,8 +24,8 @@
  * CONFIGURATION SETTINGS
  * =============================================================================== */
 
-#define ENABLE_UART_MODE        0
-#define SAFE_TEST_MODE          1  /* Test mode: print instead of activating solenoids */
+#define ENABLE_UART_MODE        1  /* Enable UART for Python Dashboard control */
+#define SAFE_TEST_MODE          0  /* Production mode: activate hardware */
 
 #define TOTAL_SOLENOIDS         16
 #define BASE_MIDI_NOTE          60
@@ -304,7 +304,11 @@ static int initialize_pwm(void)
 
     /* Initialize 4 PWM channels to OFF */
     for (int ch = 0; ch < NUM_PWM_CHANNELS; ch++) {
-        pwm_set(pwm_device, ch, PWM_NSEC(PWM_PERIOD_USEC * 1000), 0, 0);
+        int ret = pwm_set(pwm_device, ch, PWM_NSEC(PWM_PERIOD_USEC * 1000), 0, 0);
+        if (ret != 0) {
+            printk("[ERROR] PWM init failed for Ch:%d, err=%d\n", ch, ret);
+            return -1;
+        }
     }
 
     printk("[INIT] PWM initialized at %d Hz on P1.0-P1.3\n", PWM_FREQUENCY_HZ);
@@ -361,10 +365,15 @@ void activate_solenoid(uint8_t solenoid_number, uint8_t velocity, uint32_t durat
             /* Set PWM to 100% for KICK */
             uint32_t period = PWM_NSEC(PWM_PERIOD_USEC * 1000);
             uint32_t pulse = period;  /* 100% duty cycle */
-            pwm_set(pwm_device, sol->pin, period, pulse, 0);
+            int ret = pwm_set(pwm_device, sol->pin, period, pulse, 0);
+            if (ret != 0) {
+                printk("[ERROR] PWM set failed for Sol:%2d, Ch:%d, err=%d\n",
+                       solenoid_number, sol->pin, ret);
+                return;
+            }
             
-            printk("[KICK-PWM] Sol:%2d | Pin:P1.%02d | Vel:%3d | Dur:%4dms | T:%6u\n",
-                   solenoid_number, sol->pin, velocity, duration_ms, sol->activation_time);
+            printk("[KICK-PWM] Sol:%2d | Ch:%d→P1.%02d | Vel:%3d | Dur:%4dms | T:%6u\n",
+                   solenoid_number, sol->pin, sol->pin, velocity, duration_ms, sol->activation_time);
         } else {
             /* GPIO control (solenoids 4-15) - Simple ON */
             sol->in_kick_phase = false;  /* No kick phase for GPIO */
@@ -391,7 +400,11 @@ void activate_solenoid(uint8_t solenoid_number, uint8_t velocity, uint32_t durat
         if (solenoid_number < NUM_PWM_CHANNELS) {
             /* PWM OFF */
             uint32_t period = PWM_NSEC(PWM_PERIOD_USEC * 1000);
-            pwm_set(pwm_device, sol->pin, period, 0, 0);
+            int ret = pwm_set(pwm_device, sol->pin, period, 0, 0);
+            if (ret != 0) {
+                printk("[ERROR] PWM release failed for Sol:%2d, Ch:%d, err=%d\n",
+                       solenoid_number, sol->pin, ret);
+            }
         } else {
             /* GPIO OFF */
             gpio_pin_set(gpio_device, sol->pin, 0);
@@ -441,7 +454,10 @@ void control_timer_handler(struct k_timer *timer)
                 /* PRODUCTION MODE: Set PWM to hold level */
                 uint32_t pulse = velocity_to_pwm_pulse(sol->velocity);
                 uint32_t period = PWM_NSEC(PWM_PERIOD_USEC * 1000);
-                pwm_set(pwm_device, sol->pin, period, pulse, 0);
+                int ret = pwm_set(pwm_device, sol->pin, period, pulse, 0);
+                if (ret != 0) {
+                    printk("[ERROR] PWM hold failed for Sol:%2d, Ch:%d, err=%d\n", i, sol->pin, ret);
+                }
                 #endif
                 
                 int duty_percent = (sol->velocity * 100) / 127;
