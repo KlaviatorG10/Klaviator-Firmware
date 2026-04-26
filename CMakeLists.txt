@@ -1,12 +1,31 @@
-# SPDX-License-Identifier: Apache-2.0
-
+# =============================================================================
+# KLAVIATOR V4.0 - CMake Build File
+# =============================================================================
 cmake_minimum_required(VERSION 3.20.0)
 
-# Force the flash runner to be nrfjprog instead of nrfutil
-set(ZEPHYR_BOARD_FLASH_RUNNER nrfjprog)
+# Set board here or pass via: west build -b nrf54l15dk/nrf54l15/cpuapp
+# set(BOARD nrf54l15dk/nrf54l15/cpuapp)
+
+set(DTC_OVERLAY_FILE "${CMAKE_CURRENT_SOURCE_DIR}/app.overlay")
 
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
-project(hello_world)
 
-# Use main_direct.c for 1:1 direct drive (16 independent PWM channels)
-target_sources(app PRIVATE src/main_direct.c)
+project(klaviator
+    VERSION     4.0.0
+    DESCRIPTION "Klaviator PCA9685 16-solenoid piano controller"
+    LANGUAGES   C
+)
+
+target_sources(app PRIVATE
+    src/main.c
+)
+
+target_include_directories(app PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_compile_options(app PRIVATE
+    -Wall
+    -Wextra
+    -Wno-unused-parameter
+)
