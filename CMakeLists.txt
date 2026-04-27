@@ -16,14 +16,25 @@ project(klaviator
     LANGUAGES   C
 )
 
-# Select which main file to compile:
-# - src/main_led_test.c     : Basic LED wiring confirmation (simple on/off)
-# - src/main.c              : Solenoid pattern test (kick/hold/chromatic/chords)
-#                             Test on LEDs first, then use with real solenoids
-# - src/main_simple_test.c  : Other test
+# ═══════════════════════════════════════════════════════════════════════════
+# MAIN FIRMWARE SELECTION
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# PRIMARY FIRMWARE (solenoid controller):
+#   src/main.c              - ⭐ PRODUCTION SOLENOID CONTROLLER ⭐
+#                             - 16-channel PCA9685 control
+#                             - Kick-hold phases
+#                             - Velocity mapping
+#                             - Tested & working on LEDs
+#                             - Ready for real solenoids
+#
+# TEST/UTILITY FIRMWARE:
+#   src/test_led_basic.c    - Simple LED wiring test for troubleshooting
+#
+# ═══════════════════════════════════════════════════════════════════════════
 
 target_sources(app PRIVATE
-    src/main.c
+    src/main.c              # ← ACTIVE: Production solenoid controller
 )
 
 target_include_directories(app PRIVATE
