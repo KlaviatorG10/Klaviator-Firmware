@@ -16,6 +16,12 @@ project(klaviator
     LANGUAGES   C
 )
 
+# Select which main file to compile:
+# - src/main_led_test.c     : Basic LED wiring confirmation (simple on/off)
+# - src/main.c              : Solenoid pattern test (kick/hold/chromatic/chords)
+#                             Test on LEDs first, then use with real solenoids
+# - src/main_simple_test.c  : Other test
+
 target_sources(app PRIVATE
     src/main.c
 )

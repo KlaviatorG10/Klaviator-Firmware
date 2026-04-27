@@ -1,93 +1,48 @@
 /*
  * =============================================================================
- * KLAVIATOR V4.0 - Stepper Motor + PCA9685 Solenoid Controller
+ * KLAVIATOR - PCA9685 SOLENOID CONTROLLER (Clean Build)
  * =============================================================================
  *
- * SELECT MODE with the TEST_MODE define below:
+ * Fresh firmware focused purely on solenoid control via PCA9685.
+ * No motor, no UART - just clean solenoid testing.
  *
- *   TEST_MODE 1  ->  DM860E stepper motor test (runs on boot, loops forever)
- *                    Motor moves forward 1000 steps, pauses, reverses, repeats
- *                    PCA9685 / solenoids are NOT used
- *
- *   TEST_MODE 0  ->  PCA9685 solenoid test (runs on boot, full scale sequence)
- *                    Motor is NOT used
- *
- * Hardware connections:
- *
- *   MOTOR (DM860E):
- *     P1.09  ->  DM860E PUL+  (step pulses)
- *     P1.10  ->  DM860E DIR+  (direction)
- *     P1.11  ->  DM860E ENA+  (enable, active HIGH here)
- *     GND    ->  DM860E PUL-, DIR-, ENA-, GND
- *
- *   SOLENOIDS (PCA9685 via i2c21):
+ * Hardware Setup:
+ *   PCA9685:
  *     P1.07  ->  PCA9685 SCL  (+ 4.7k pullup to 3.3V)
  *     P1.08  ->  PCA9685 SDA  (+ 4.7k pullup to 3.3V)
  *     3.3V   ->  PCA9685 VCC
  *     GND    ->  PCA9685 GND, OE, A0-A5
- *     PCA9685 CH0-15  ->  100R  ->  IRLZ44N gate
- *     IRLZ44N drain   ->  solenoid-  ->  12V
- *     1N4007 across each solenoid (cathode to 12V)
  *
- *   UART (optional, for dashboard when ENABLE_UART_MODE=1):
- *     P1.13  ->  USB-UART TX
- *     P1.14  ->  USB-UART RX
+ *   Solenoids (per channel):
+ *     PCA9685 CH0-15 -> 100Ω -> IRLZ44N gate
+ *     IRLZ44N source -> GND
+ *     IRLZ44N drain  -> Solenoid negative
+ *     Solenoid positive -> 12V
+ *     1N4007 diode across solenoid (cathode to +12V)
+ *
+ * Test Sequence:
+ *   - Individual solenoid strikes (CH0-15)
+ *   - Velocity control demonstration
+ *   - Kick-hold phase demonstration
+ *   - Chord testing (multiple solenoids)
  * =============================================================================
  */
 
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
-#include <zephyr/drivers/gpio.h>
-#include <zephyr/drivers/uart.h>
 #include <zephyr/drivers/i2c.h>
 
 /* =============================================================================
- * >>>  SET THIS TO CHOOSE WHAT RUNS ON BOOT  <<<
- *
- *   1 = DM860E stepper motor test
- *   0 = PCA9685 solenoid test
- * ============================================================================= */
-#define TEST_MODE           1
-
-/* =============================================================================
- * GENERAL CONFIGURATION
- * ============================================================================= */
-
-#define SAFE_TEST_MODE      0   /* 0 = real hardware, 1 = print only */
-#define ENABLE_UART_MODE    0   /* 0 = standalone, 1 = KDAA dashboard */
-
-/* =============================================================================
- * MOTOR CONFIGURATION  (used when TEST_MODE=1)
- * ============================================================================= */
-
-#define GPIO_DEV_NODE       DT_NODELABEL(gpio1)
-#define PIN_STEP            9       /* P1.09  ->  DM860E PUL+ */
-#define PIN_DIR             10      /* P1.10  ->  DM860E DIR+ */
-#define PIN_ENA             11      /* P1.11  ->  DM860E ENA+ */
-
-#define MOTOR_STEPS_PER_MOVE    1000    /* steps per direction */
-#define MOTOR_STEP_DELAY_US     500     /* 500us per half-step = ~1000 steps/sec */
-#define MOTOR_PAUSE_MS          1000    /* pause between directions */
-
-#define DIR_FORWARD         1
-#define DIR_REVERSE         0
-
-static const struct device *gpio_dev = DEVICE_DT_GET(GPIO_DEV_NODE);
-
-/* =============================================================================
- * SOLENOID CONFIGURATION  (used when TEST_MODE=0)
+ * CONFIGURATION
  * ============================================================================= */
 
 #define TOTAL_SOLENOIDS     16
-#define BASE_MIDI_NOTE      60
-#define KICK_DURATION_MS    20
-#define MIN_PWM_PERCENT     18
-#define TIMER_PERIOD_MS     5
+#define BASE_MIDI_NOTE      60          /* Middle C (C4) */
+#define KICK_DURATION_MS    20          /* Full power kick phase */
+#define MIN_PWM_PERCENT     18          /* Minimum hold power */
+#define TIMER_PERIOD_MS     5           /* Control loop frequency */
 
-/* i2c21: separate instance from UART20, free to use */
+/* PCA9685 Configuration */
 #define I2C_DEV_NODE            DT_NODELABEL(i2c21)
 #define PCA9685_I2C_ADDR        0x40
 #define PCA9685_MODE1           0x00
@@ -107,81 +62,6 @@ static const struct device *gpio_dev = DEVICE_DT_GET(GPIO_DEV_NODE);
 static const struct device *i2c_device = DEVICE_DT_GET(I2C_DEV_NODE);
 
 /* =============================================================================
- * CLOCK
- * ============================================================================= */
-
-static uint32_t system_time_offset = 0;
-static inline uint32_t get_sync_time(void) { return k_uptime_get_32() - system_time_offset; }
-void sync_clock(void) { system_time_offset = k_uptime_get_32(); printk("[SYNC] T=0\n"); }
-
-/* =============================================================================
- * EVENT SYSTEM  (solenoid sequencer)
- * ============================================================================= */
-
-typedef enum { EVENT_SYNC, EVENT_STOP, EVENT_MOVE, EVENT_STRIKE } event_type_t;
-
-typedef struct {
-    event_type_t type;
-    uint32_t     target_time_ms;
-    uint8_t      solenoid_number;
-    uint8_t      velocity;
-    uint16_t     duration_ms;
-    uint16_t     sequence_number;
-    uint8_t      hand;
-} kdaa_event_t;
-
-#define EVENT_BUFFER_SIZE 256
-typedef struct {
-    kdaa_event_t      events[EVENT_BUFFER_SIZE];
-    volatile uint16_t write_index, read_index, count;
-    uint32_t          total_added, total_executed, overflow_count;
-} event_buffer_t;
-
-static K_MUTEX_DEFINE(event_mutex);
-static event_buffer_t event_buffer;
-
-static void init_event_buffer(event_buffer_t *b) { memset(b, 0, sizeof(*b)); }
-
-static bool add_event(event_buffer_t *b, const kdaa_event_t *ev) {
-    k_mutex_lock(&event_mutex, K_FOREVER);
-    if (b->count >= EVENT_BUFFER_SIZE) {
-        b->overflow_count++;
-        k_mutex_unlock(&event_mutex);
-        return false;
-    }
-    b->events[b->write_index] = *ev;
-    b->write_index = (b->write_index + 1) & (EVENT_BUFFER_SIZE - 1);
-    b->count++; b->total_added++;
-    k_mutex_unlock(&event_mutex);
-    return true;
-}
-
-static bool pop_event(event_buffer_t *b, kdaa_event_t *ev) {
-    k_mutex_lock(&event_mutex, K_FOREVER);
-    if (b->count == 0) { k_mutex_unlock(&event_mutex); return false; }
-    *ev = b->events[b->read_index];
-    b->read_index = (b->read_index + 1) & (EVENT_BUFFER_SIZE - 1);
-    b->count--; b->total_executed++;
-    k_mutex_unlock(&event_mutex);
-    return true;
-}
-
-static bool peek_event(const event_buffer_t *b, kdaa_event_t *ev) {
-    k_mutex_lock(&event_mutex, K_FOREVER);
-    if (b->count == 0) { k_mutex_unlock(&event_mutex); return false; }
-    *ev = b->events[b->read_index];
-    k_mutex_unlock(&event_mutex);
-    return true;
-}
-
-static void clear_events(event_buffer_t *b) {
-    k_mutex_lock(&event_mutex, K_FOREVER);
-    b->write_index = b->read_index = b->count = 0;
-    memset(b->events, 0, sizeof(b->events));
-    k_mutex_unlock(&event_mutex);
-}
-
-/* =============================================================================
  * SOLENOID STATE
  * ============================================================================= */
 
@@ -194,56 +74,63 @@ struct Solenoid {
     uint32_t duration_target_ms;
     uint32_t activation_time;
 };
+
 static struct Solenoid solenoids[TOTAL_SOLENOIDS];
-
-/* =============================================================================
- * SEQUENCER THREAD
- * ============================================================================= */
-
-#define SEQUENCER_STACK_SIZE 4096
-#define SEQUENCER_PRIORITY   K_PRIO_COOP(1)
-K_THREAD_STACK_DEFINE(sequencer_stack, SEQUENCER_STACK_SIZE);
-static struct k_thread sequencer_thread;
-
-/* =============================================================================
- * UART
- * ============================================================================= */
-
-#if ENABLE_UART_MODE
-#define MSG_SIZE 128
-K_MSGQ_DEFINE(uart_msgq, MSG_SIZE, 10, 4);
-static const struct device *const uart_dev =
-    DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
-static char rx_buf[MSG_SIZE];
-static int  rx_pos = 0;
-#endif
 
 /* =============================================================================
  * PCA9685 DRIVER
  * ============================================================================= */
 
-static int pca9685_write_reg(uint8_t reg, uint8_t val) {
+static int pca9685_write_reg(uint8_t reg, uint8_t val)
+{
     uint8_t buf[2] = { reg, val };
     int ret = i2c_write(i2c_device, buf, 2, PCA9685_I2C_ADDR);
-    if (ret) printk("[ERROR] PCA9685 reg=0x%02X val=0x%02X err=%d\n", reg, val, ret);
+    if (ret) {
+        printk("[ERROR] PCA9685 write reg=0x%02X val=0x%02X err=%d\n", reg, val, ret);
+    }
+    /* Small delay to allow I2C bus to settle */
+    k_usleep(100);
     return ret;
 }
 
-static int pca9685_set_channel(uint8_t ch, uint16_t v) {
-    if (ch >= 16) return -EINVAL;
-    uint8_t reg = PCA9685_LED0_ON_L + (ch * 4);
-    uint8_t buf[5];
-    buf[0] = reg;
-    if (v == 0)                    { buf[1]=0x00; buf[2]=0x00; buf[3]=0x00; buf[4]=0x10; }
-    else if (v >= PCA9685_MAX_PWM) { buf[1]=0x00; buf[2]=0x10; buf[3]=0x00; buf[4]=0x00; }
-    else                           { buf[1]=0x00; buf[2]=0x00;
-                                     buf[3]=(uint8_t)(v & 0xFF); buf[4]=(uint8_t)(v >> 8); }
-    int ret = i2c_write(i2c_device, buf, 5, PCA9685_I2C_ADDR);
-    if (ret) printk("[ERROR] PCA9685 ch=%d val=%u err=%d\n", ch, v, ret);
+static int pca9685_set_channel(uint8_t ch, uint16_t value)
+{
+    if (ch >= 16) {
+        return -EINVAL;
+    }
+
+    uint8_t reg_base = PCA9685_LED0_ON_L + (ch * 4);
+    int ret = 0;
+
+    if (value == 0) {
+        /* Full OFF - set bit 4 of OFF_H register */
+        ret |= pca9685_write_reg(reg_base + 0, 0x00);  /* ON_L */
+        ret |= pca9685_write_reg(reg_base + 1, 0x00);  /* ON_H */
+        ret |= pca9685_write_reg(reg_base + 2, 0x00);  /* OFF_L */
+        ret |= pca9685_write_reg(reg_base + 3, 0x10);  /* OFF_H = bit 4 set */
+    } else if (value >= PCA9685_MAX_PWM) {
+        /* Full ON - set bit 4 of ON_H register */
+        ret |= pca9685_write_reg(reg_base + 0, 0x00);  /* ON_L */
+        ret |= pca9685_write_reg(reg_base + 1, 0x10);  /* ON_H = bit 4 set */
+        ret |= pca9685_write_reg(reg_base + 2, 0x00);  /* OFF_L */
+        ret |= pca9685_write_reg(reg_base + 3, 0x00);  /* OFF_H */
+    } else {
+        /* PWM value - set ON=0, OFF=value */
+        ret |= pca9685_write_reg(reg_base + 0, 0x00);              /* ON_L = 0 */
+        ret |= pca9685_write_reg(reg_base + 1, 0x00);              /* ON_H = 0 */
+        ret |= pca9685_write_reg(reg_base + 2, (uint8_t)(value & 0xFF));    /* OFF_L */
+        ret |= pca9685_write_reg(reg_base + 3, (uint8_t)(value >> 8));      /* OFF_H */
+    }
+
+    if (ret) {
+        printk("[ERROR] PCA9685 set CH%d=%u err=%d\n", ch, value, ret);
+    }
+
     return ret;
 }
 
-static int pca9685_all_off(void) {
+static int pca9685_all_off(void)
+{
     int r = 0;
     r |= pca9685_write_reg(PCA9685_ALL_LED_ON_L,  0x00);
     r |= pca9685_write_reg(PCA9685_ALL_LED_ON_H,  0x00);
@@ -252,100 +139,129 @@ static int pca9685_all_off(void) {
     return r;
 }
 
+static int init_pca9685(void)
+{
+    printk("\n[INIT] PCA9685 on i2c21 addr=0x%02X\n", PCA9685_I2C_ADDR);
+
+    if (!device_is_ready(i2c_device)) {
+        printk("[ERROR] i2c21 not ready\n");
+        printk("[ERROR] Check: P1.07=SCL P1.08=SDA (4.7k pullups) VCC=3.3V GND=GND\n");
+        return -ENODEV;
+    }
+
+    /* Sleep mode to set prescaler */
+    if (pca9685_write_reg(PCA9685_MODE1, PCA9685_MODE1_SLEEP)) {
+        return -EIO;
+    }
+    k_usleep(500);
+
+    /* Set PWM frequency ~203Hz */
+    if (pca9685_write_reg(PCA9685_PRESCALE, PCA9685_PRESCALE_VALUE)) {
+        return -EIO;
+    }
+
+    /* Wake up with auto-increment */
+    if (pca9685_write_reg(PCA9685_MODE1, PCA9685_MODE1_AI | PCA9685_MODE1_ALLCALL)) {
+        return -EIO;
+    }
+    k_usleep(500);
+
+    /* Totem pole output */
+    if (pca9685_write_reg(PCA9685_MODE2, 0x04)) {
+        return -EIO;
+    }
+
+    /* Turn all off */
+    if (pca9685_all_off()) {
+        return -EIO;
+    }
+
+    printk("[INIT] PCA9685 ready (~203Hz PWM)\n");
+    return 0;
+}
+
 /* =============================================================================
- * VELOCITY -> PWM  (integer quadratic, no FPU)
+ * VELOCITY TO PWM CONVERSION (Integer Math)
  * ============================================================================= */
 
-static uint16_t velocity_to_pwm(uint8_t v) {
-    if (v == 0)   return 0;
-    if (v >= 127) return PCA9685_MAX_PWM;
-    uint32_t v2  = (uint32_t)v * v;
+static uint16_t velocity_to_pwm(uint8_t velocity)
+{
+    if (velocity == 0) {
+        return 0;
+    }
+    if (velocity >= 127) {
+        return PCA9685_MAX_PWM;
+    }
+
+    /* Quadratic mapping: MIN_PWM_PERCENT to 100% based on velocity^2 */
+    uint32_t v2 = (uint32_t)velocity * velocity;
     uint32_t pct = MIN_PWM_PERCENT + (v2 * (100U - MIN_PWM_PERCENT)) / (127U * 127U);
     return (uint16_t)((pct * PCA9685_MAX_PWM) / 100U);
 }
 
-static const char *note_name(uint8_t n) {
-    static const char *names[] = {
-        "C","C#","D","D#","E","F","F#","G","G#","A","A#","B","C'","C#'","D'","D#'"
-    };
-    return (n < TOTAL_SOLENOIDS) ? names[n] : "?";
-}
-
 /* =============================================================================
- * SOLENOID INIT
+ * NOTE NAME HELPER
  * ============================================================================= */
 
-static void init_solenoid_data(void) {
-    printk("\n[INIT] Solenoid map (PCA9685 CH0-15):\n");
-    for (int i = 0; i < TOTAL_SOLENOIDS; i++) {
-        solenoids[i] = (struct Solenoid){ .channel = (uint8_t)i };
-        printk("  Sol %2d  CH%2d  Note %3d (%s)\n",
-               i, i, BASE_MIDI_NOTE + i, note_name(i));
-    }
-    printk("\n");
-}
-
-static int init_pca9685(void) {
-    printk("[INIT] PCA9685 on i2c21 addr=0x%02X prescaler=0x%02X (~200Hz)\n",
-           PCA9685_I2C_ADDR, PCA9685_PRESCALE_VALUE);
-    if (!device_is_ready(i2c_device)) {
-        printk("[ERROR] i2c21 not ready. Check P1.07=SCL P1.08=SDA VCC=3.3V\n");
-        return -ENODEV;
-    }
-    if (pca9685_write_reg(PCA9685_MODE1, PCA9685_MODE1_SLEEP))                   return -EIO;
-    k_usleep(500);
-    if (pca9685_write_reg(PCA9685_PRESCALE, PCA9685_PRESCALE_VALUE))             return -EIO;
-    if (pca9685_write_reg(PCA9685_MODE1, PCA9685_MODE1_AI | PCA9685_MODE1_ALLCALL)) return -EIO;
-    k_usleep(500);
-    if (pca9685_write_reg(PCA9685_MODE2, 0x04))                                  return -EIO;
-    if (pca9685_all_off())                                                        return -EIO;
-    printk("[INIT] PCA9685 ready\n");
-    return 0;
+static const char *note_name(uint8_t solenoid_num)
+{
+    static const char *names[] = {
+        "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
+        "C'", "C#'", "D'", "D#'"
+    };
+    return (solenoid_num < TOTAL_SOLENOIDS) ? names[solenoid_num] : "?";
 }
 
 /* =============================================================================
  * SOLENOID CONTROL
  * ============================================================================= */
 
-void activate_solenoid(uint8_t sol, uint8_t velocity, uint32_t duration_ms) {
-    if (sol >= TOTAL_SOLENOIDS) return;
+void activate_solenoid(uint8_t sol, uint8_t velocity, uint32_t duration_ms)
+{
+    if (sol >= TOTAL_SOLENOIDS) {
+        return;
+    }
+
     struct Solenoid *s = &solenoids[sol];
+
     if (velocity > 0) {
         s->velocity = velocity;
         s->is_active = true;
         s->duration_target_ms = duration_ms;
-        s->activation_time = s->kick_start_time = get_sync_time();
+        s->activation_time = k_uptime_get_32();
+        s->kick_start_time = s->activation_time;
         s->in_kick_phase = true;
-#if SAFE_TEST_MODE
-        printk("[SAFE] ACTIVATE sol=%2d vel=%3d dur=%4dms T=%u\n",
-               sol, velocity, duration_ms, s->activation_time);
-#else
+
+        /* Full power kick */
         pca9685_set_channel(s->channel, PCA9685_MAX_PWM);
-        printk("[KICK]    sol=%2d ch=%2d vel=%3d dur=%4dms T=%u\n",
-               sol, s->channel, velocity, duration_ms, s->activation_time);
-#endif
+        
+        printk("[KICK]    Sol %2d  CH%2d  %3s  vel=%3d  dur=%4dms  T=%u\n",
+               sol, s->channel, note_name(sol), velocity, duration_ms, 
+               s->activation_time);
     } else {
+        /* Release */
         s->velocity = 0;
         s->is_active = false;
         s->in_kick_phase = false;
         s->duration_target_ms = 0;
-#if SAFE_TEST_MODE
-        printk("[SAFE] RELEASE sol=%2d T=%u\n", sol, get_sync_time());
-#else
+
         pca9685_set_channel(s->channel, 0);
-        printk("[RELEASE] sol=%2d ch=%2d T=%u\n",
-               sol, s->channel, get_sync_time());
-#endif
+        
+        printk("[RELEASE] Sol %2d  CH%2d  %3s  T=%u\n",
+               sol, s->channel, note_name(sol), k_uptime_get_32());
     }
 }
 
-void deactivate_solenoid(uint8_t sol) { activate_solenoid(sol, 0, 0); }
+void deactivate_solenoid(uint8_t sol)
+{
+    activate_solenoid(sol, 0, 0);
+}
 
-void deactivate_all_solenoids(void) {
-    printk("[ALL-OFF]\n");
-#if !SAFE_TEST_MODE
+void deactivate_all_solenoids(void)
+{
+    printk("[ALL-OFF] Releasing all solenoids\n");
     pca9685_all_off();
-#endif
+
     for (int i = 0; i < TOTAL_SOLENOIDS; i++) {
         solenoids[i].velocity = 0;
         solenoids[i].is_active = false;
@@ -355,276 +271,152 @@ void deactivate_all_solenoids(void) {
 }
 
 /* =============================================================================
- * CONTROL TIMER  (kick->hold + auto-release)
+ * CONTROL TIMER (Kick->Hold + Auto-Release)
+ *
+ * NOTE: Timer callbacks run in ISR context - we CANNOT do I2C writes here!
+ * Instead, we set flags and let the main thread handle actual I2C operations.
  * ============================================================================= */
 
-static void control_timer_cb(struct k_timer *timer) {
-    uint32_t now = get_sync_time();
+/* Flags for pending actions */
+static volatile bool pending_actions[TOTAL_SOLENOIDS];
+
+static void control_timer_callback(struct k_timer *timer)
+{
+    uint32_t now = k_uptime_get_32();
+
     for (int i = 0; i < TOTAL_SOLENOIDS; i++) {
         struct Solenoid *s = &solenoids[i];
-        if (!s->is_active) continue;
-
-        if (s->in_kick_phase &&
-            (now - s->kick_start_time) >= KICK_DURATION_MS) {
-            s->in_kick_phase = false;
-            uint16_t hold = velocity_to_pwm(s->velocity);
-#if !SAFE_TEST_MODE
-            pca9685_set_channel(s->channel, hold);
-#endif
-            printk("[HOLD]    sol=%2d ch=%2d vel=%3d pwm=%4u T=%u%s\n",
-                   i, s->channel, s->velocity, hold, now,
-                   SAFE_TEST_MODE ? " (SIM)" : "");
+        
+        if (!s->is_active) {
+            continue;
         }
 
+        /* Check if kick->hold transition needed */
+        if (s->in_kick_phase && (now - s->kick_start_time) >= KICK_DURATION_MS) {
+            s->in_kick_phase = false;
+            pending_actions[i] = true;  /* Signal main thread to update */
+        }
+
+        /* Check if auto-release needed */
         if (s->duration_target_ms > 0 &&
             (now - s->activation_time) >= s->duration_target_ms) {
-            printk("[AUTO-REL] sol=%2d dur=%4dms T=%u%s\n",
-                   i, s->duration_target_ms, now,
-                   SAFE_TEST_MODE ? " (SIM)" : "");
-            deactivate_solenoid(i);
+            s->is_active = false;  /* Mark for release */
+            pending_actions[i] = true;  /* Signal main thread */
         }
     }
 }
 
-K_TIMER_DEFINE(control_timer, control_timer_cb, NULL);
+K_TIMER_DEFINE(control_timer, control_timer_callback, NULL);
 
-/* =============================================================================
- * SEQUENCER THREAD
- * ============================================================================= */
-
-static void sequencer_loop(void *a1, void *a2, void *a3) {
-    kdaa_event_t ev;
-    printk("[SEQ] Started prio=%d poll=0.5ms\n", SEQUENCER_PRIORITY);
-    while (1) {
-        uint32_t now = get_sync_time();
-        while (peek_event(&event_buffer, &ev)) {
-            if (now < ev.target_time_ms) break;
-            pop_event(&event_buffer, &ev);
-            switch (ev.type) {
-            case EVENT_STRIKE:
-                if (ev.solenoid_number < TOTAL_SOLENOIDS) {
-                    activate_solenoid(ev.solenoid_number,
-                                      ev.velocity, ev.duration_ms);
-                    printk("[EXEC] #%u STRIKE sol=%2d vel=%3d dur=%4dms"
-                           " T=%u actual=%u delta=%d\n",
-                           ev.sequence_number, ev.solenoid_number,
-                           ev.velocity, ev.duration_ms,
-                           ev.target_time_ms, now,
-                           (int)(now - ev.target_time_ms));
-                }
-                break;
-            case EVENT_STOP:
-                printk("[EXEC] #%u STOP\n", ev.sequence_number);
-                clear_events(&event_buffer);
-                deactivate_all_solenoids();
-                break;
-            case EVENT_SYNC:
-                printk("[EXEC] #%u SYNC\n", ev.sequence_number);
-                sync_clock();
-                break;
-            case EVENT_MOVE:
-                printk("[EXEC] #%u MOVE hand=%d pos=%d\n",
-                       ev.sequence_number, ev.hand, ev.solenoid_number);
-                break;
-            default:
-                printk("[ERROR] Unknown event %d\n", ev.type);
-                break;
-            }
-        }
-        k_usleep(500);
-    }
-}
-
-/* =============================================================================
- * UART  (compiled out when ENABLE_UART_MODE=0)
- * ============================================================================= */
-
-#if ENABLE_UART_MODE
-static void uart_cb(const struct device *dev, void *user_data) {
-    uint8_t c;
-    if (!uart_irq_update(uart_dev) || !uart_irq_rx_ready(uart_dev)) return;
-    while (uart_fifo_read(uart_dev, &c, 1) == 1) {
-        if (c == '\n' || c == '\r') {
-            if (rx_pos > 0) {
-                rx_buf[rx_pos] = '\0';
-                k_msgq_put(&uart_msgq, rx_buf, K_NO_WAIT);
-                rx_pos = 0;
-            }
-        } else if (rx_pos < (MSG_SIZE - 1)) {
-            rx_buf[rx_pos++] = c;
-        } else {
-            rx_pos = 0;
-        }
-    }
-}
-
-static void parse_kdaa(char *msg) {
-    int seq, hand, note, vel, t_ms, dur;
-    if (!strcasecmp(msg, "sync"))  { sync_clock();               return; }
-    if (!strcasecmp(msg, "all:0")) { deactivate_all_solenoids(); return; }
-    if (sscanf(msg, "%d:%d:%d:%d:%d:%d",
-               &seq, &hand, &note, &vel, &t_ms, &dur) == 6) {
-        int sol = note - BASE_MIDI_NOTE;
-        if (sol >= 0 && sol < TOTAL_SOLENOIDS && vel >= 0 && vel <= 127)
-            activate_solenoid((uint8_t)sol, (uint8_t)vel, (uint32_t)dur);
-        else printk("[ERR] Invalid note/velocity\n");
-        return;
-    }
-    if (sscanf(msg, "%d:%d", &note, &vel) == 2) {
-        int sol = note - BASE_MIDI_NOTE;
-        if (sol >= 0 && sol < TOTAL_SOLENOIDS && vel >= 0 && vel <= 127)
-            activate_solenoid((uint8_t)sol, (uint8_t)vel, 0);
-        else printk("[ERR] Invalid note/velocity\n");
-        return;
-    }
-    printk("[ERR] Use S:H:N:V:T:D or NOTE:VEL\n");
-}
-#endif
-
-/* =============================================================================
- * MOTOR TEST  (TEST_MODE=1)
- *
- * Sends step pulses to DM860E.
- * Adjust MOTOR_STEP_DELAY_US to change speed:
- *   500us  = ~1000 steps/sec  (medium)
- *   200us  = ~2500 steps/sec  (fast)
- *   1000us = ~500  steps/sec  (slow)
- *
- * Adjust MOTOR_STEPS_PER_MOVE to change distance.
- * At DM860E default 200 steps/rev: 1000 steps = 5 full rotations.
- * ============================================================================= */
-
-#if TEST_MODE
-
-static int init_motor(void) {
-    printk("[MOTOR] Initialising DM860E on gpio1\n");
-    printk("[MOTOR] P1.09=STEP  P1.10=DIR  P1.11=ENA\n");
-
-    if (!device_is_ready(gpio_dev)) {
-        printk("[ERROR] gpio1 not ready\n");
-        return -ENODEV;
-    }
-
-    gpio_pin_configure(gpio_dev, PIN_STEP, GPIO_OUTPUT_INACTIVE);
-    gpio_pin_configure(gpio_dev, PIN_DIR,  GPIO_OUTPUT_INACTIVE);
-    gpio_pin_configure(gpio_dev, PIN_ENA,  GPIO_OUTPUT_INACTIVE);
-
-    /* Enable motor driver */
-    gpio_pin_set(gpio_dev, PIN_ENA, 1);
-    k_msleep(100); /* DM860E needs time to enable */
-
-    printk("[MOTOR] DM860E enabled\n");
-    return 0;
-}
-
-static void step_motor(uint32_t steps, int direction, uint32_t delay_us)
+/* Process pending solenoid updates (call from main thread) */
+static void process_solenoid_updates(void)
 {
-    gpio_pin_set(gpio_dev, PIN_DIR, direction);
-    k_usleep(10); /* direction settle time */
-
-    for (uint32_t i = 0; i < steps; i++) {
-        gpio_pin_set(gpio_dev, PIN_STEP, 1);
-        k_usleep(delay_us);
-        gpio_pin_set(gpio_dev, PIN_STEP, 0);
-        k_usleep(delay_us);
+    uint32_t now = k_uptime_get_32();
+    
+    for (int i = 0; i < TOTAL_SOLENOIDS; i++) {
+        if (!pending_actions[i]) {
+            continue;
+        }
+        
+        pending_actions[i] = false;
+        struct Solenoid *s = &solenoids[i];
+        
+        if (!s->is_active) {
+            /* Release solenoid */
+            pca9685_set_channel(s->channel, 0);
+            printk("[AUTO-REL] Sol %2d  CH%2d  %3s  T=%u\n",
+                   i, s->channel, note_name(i), now);
+            s->duration_target_ms = 0;
+        } else if (!s->in_kick_phase) {
+            /* Transition to hold */
+            uint16_t hold_pwm = velocity_to_pwm(s->velocity);
+            pca9685_set_channel(s->channel, hold_pwm);
+            printk("[HOLD]    Sol %2d  CH%2d  %3s  vel=%3d  pwm=%4u  T=%u\n",
+                   i, s->channel, note_name(i), s->velocity, hold_pwm, now);
+        }
     }
 }
-
-static void run_motor_test(void) {
-    printk("\n");
-    printk("╔══════════════════════════════════════════════════════╗\n");
-    printk("║  DM860E MOTOR TEST  -  FORWARD / REVERSE LOOP       ║\n");
-    printk("╚══════════════════════════════════════════════════════╝\n");
-    printk("[MOTOR] Steps per move : %d\n",   MOTOR_STEPS_PER_MOVE);
-    printk("[MOTOR] Step delay     : %d us\n", MOTOR_STEP_DELAY_US);
-    printk("[MOTOR] Speed          : ~%d steps/sec\n",
-           1000000 / (MOTOR_STEP_DELAY_US * 2));
-    printk("[MOTOR] Pause between  : %d ms\n\n", MOTOR_PAUSE_MS);
-
-    uint32_t pass = 0;
-    while (1) {
-        printk("[MOTOR] Pass %u  FORWARD  %d steps...\n",
-               pass, MOTOR_STEPS_PER_MOVE);
-        step_motor(MOTOR_STEPS_PER_MOVE, DIR_FORWARD, MOTOR_STEP_DELAY_US);
-
-        printk("[MOTOR] Pause %dms\n", MOTOR_PAUSE_MS);
-        k_msleep(MOTOR_PAUSE_MS);
-
-        printk("[MOTOR] Pass %u  REVERSE  %d steps...\n",
-               pass, MOTOR_STEPS_PER_MOVE);
-        step_motor(MOTOR_STEPS_PER_MOVE, DIR_REVERSE, MOTOR_STEP_DELAY_US);
-
-        printk("[MOTOR] Pause %dms\n\n", MOTOR_PAUSE_MS);
-        k_msleep(MOTOR_PAUSE_MS);
-
-        pass++;
-    }
-}
-
-#endif /* TEST_MODE */
 
 /* =============================================================================
- * SOLENOID TEST SEQUENCE  (TEST_MODE=0)
+ * SOLENOID INITIALIZATION
  * ============================================================================= */
 
-#if !TEST_MODE
-
-static void queue_strike(uint16_t seq, uint32_t t,
-                         uint8_t sol, uint8_t vel, uint16_t dur) {
-    kdaa_event_t ev = {
-        .type            = EVENT_STRIKE,
-        .target_time_ms  = t,
-        .solenoid_number = sol,
-        .velocity        = vel,
-        .duration_ms     = dur,
-        .sequence_number = seq,
-        .hand            = 0,
-    };
-    if (!add_event(&event_buffer, &ev))
-        printk("[ERR] Buffer full seq=%u\n", seq);
+static void init_solenoid_data(void)
+{
+    printk("\n[INIT] Solenoid mapping (16 channels):\n");
+    for (int i = 0; i < TOTAL_SOLENOIDS; i++) {
+        solenoids[i].channel = (uint8_t)i;
+        solenoids[i].is_active = false;
+        solenoids[i].velocity = 0;
+        printk("  Sol %2d  ->  CH%2d  MIDI %3d  Note %3s\n",
+               i, i, BASE_MIDI_NOTE + i, note_name(i));
+    }
+    printk("\n");
 }
 
-static void run_solenoid_test(void) {
+/* =============================================================================
+ * TEST SEQUENCE
+ * ============================================================================= */
+
+static void run_solenoid_test_sequence(void)
+{
     printk("\n");
     printk("╔══════════════════════════════════════════════════════╗\n");
-    printk("║  SOLENOID TEST  -  AUTONOMOUS BOOT PLAY             ║\n");
+    printk("║  SOLENOID TEST SEQUENCE                             ║\n");
     printk("╚══════════════════════════════════════════════════════╝\n");
-    printk("[TEST] Phase 1  T=0.5-2.0s  : vel sweep sol0 (30/64/127)\n");
-    printk("[TEST] Phase 2  T=3.0s      : 500ms hold, watch KICK->HOLD\n");
-    printk("[TEST] Phase 3  T=4.0s      : rapid fire x4\n");
-    printk("[TEST] Phase 4  T=5.5s      : all 16 ascending\n");
-    printk("[TEST] Phase 5  T=9.0s      : second pass softer\n");
-    printk("[TEST] Phase 6  T=12.5s     : STOP\n\n");
 
-    uint16_t seq = 1;
+    /* Phase 1: Individual strikes with different velocities */
+    printk("\n[TEST] Phase 1: Velocity sweep on Sol 0 (soft -> medium -> loud)\n");
+    activate_solenoid(0, 40, 100);   /* Soft */
+    k_msleep(500);
+    activate_solenoid(0, 80, 100);   /* Medium */
+    k_msleep(500);
+    activate_solenoid(0, 127, 100);  /* Loud */
+    k_msleep(500);
 
-    queue_strike(seq++,  500, 0,  30,  80);
-    queue_strike(seq++, 1200, 0,  64,  80);
-    queue_strike(seq++, 2000, 0, 127,  80);
-    queue_strike(seq++, 3000, 0,  90, 500);
-    queue_strike(seq++, 4000, 0, 100,  60);
-    queue_strike(seq++, 4080, 0, 100,  60);
-    queue_strike(seq++, 4160, 0, 100,  60);
-    queue_strike(seq++, 4240, 0, 100,  60);
+    /* Phase 2: Long hold to observe kick->hold transition */
+    printk("\n[TEST] Phase 2: Long hold (500ms) - watch KICK->HOLD transition\n");
+    activate_solenoid(1, 90, 500);
+    k_msleep(1000);
 
-    for (int i = 0; i < TOTAL_SOLENOIDS; i++)
-        queue_strike(seq++, (uint32_t)(5500 + i * 200), (uint8_t)i, 90, 120);
+    /* Phase 3: Rapid fire */
+    printk("\n[TEST] Phase 3: Rapid fire x5 on Sol 2\n");
+    for (int i = 0; i < 5; i++) {
+        activate_solenoid(2, 100, 60);
+        k_msleep(80);
+    }
+    k_msleep(500);
 
-    for (int i = 0; i < TOTAL_SOLENOIDS; i++)
-        queue_strike(seq++, (uint32_t)(9000 + i * 200), (uint8_t)i, 70, 100);
+    /* Phase 4: Chromatic scale (all solenoids sequentially) */
+    printk("\n[TEST] Phase 4: Chromatic scale (all 16 solenoids)\n");
+    for (int i = 0; i < TOTAL_SOLENOIDS; i++) {
+        activate_solenoid(i, 85, 120);
+        k_msleep(200);
+    }
+    k_msleep(500);
 
-    kdaa_event_t stop = {
-        .type           = EVENT_STOP,
-        .target_time_ms = 12500,
-        .sequence_number = seq++,
-        .hand           = 0,
-    };
-    add_event(&event_buffer, &stop);
+    /* Phase 5: Chord test (multiple solenoids simultaneously) */
+    printk("\n[TEST] Phase 5: C Major chord (Sol 0, 4, 7)\n");
+    activate_solenoid(0, 95, 300);  /* C */
+    activate_solenoid(4, 95, 300);  /* E */
+    activate_solenoid(7, 95, 300);  /* G */
+    k_msleep(800);
 
-    printk("[TEST] %u events queued. Starts in ~500ms.\n\n", seq - 1);
+    printk("\n[TEST] Phase 6: C Minor chord (Sol 0, 3, 7)\n");
+    activate_solenoid(0, 95, 300);  /* C */
+    activate_solenoid(3, 95, 300);  /* D# */
+    activate_solenoid(7, 95, 300);  /* G */
+    k_msleep(800);
+
+    /* Phase 6: All solenoids at once (power test) */
+    printk("\n[TEST] Phase 7: ALL solenoids simultaneously (power test)\n");
+    for (int i = 0; i < TOTAL_SOLENOIDS; i++) {
+        activate_solenoid(i, 70, 200);
+    }
+    k_msleep(500);
+
+    printk("\n[TEST] Sequence complete!\n\n");
 }
-
-#endif /* !TEST_MODE */
 
 /* =============================================================================
  * MAIN
@@ -634,87 +426,57 @@ int main(void)
 {
     printk("\n");
     printk("╔══════════════════════════════════════════════════════╗\n");
-    printk("║  KLAVIATOR V4.0                                     ║\n");
-
-#if TEST_MODE
-    printk("║  MODE: DM860E MOTOR TEST                            ║\n");
-#else
-    printk("║  MODE: PCA9685 SOLENOID TEST                        ║\n");
-#endif
-
-    printk("╚══════════════════════════════════════════════════════╝\n\n");
+    printk("║  KLAVIATOR - SOLENOID CONTROLLER                    ║\n");
+    printk("║  Fresh Build - Solenoids Only                       ║\n");
+    printk("╚══════════════════════════════════════════════════════╝\n");
 
     k_msleep(100);
 
-    /* ------------------------------------------------------------------ */
-#if TEST_MODE
-    /* ---- MOTOR TEST PATH ---- */
-
-    if (init_motor() < 0) {
-        printk("[ERROR] Motor init failed - check wiring\n");
-        printk("[ERROR] P1.09=STEP P1.10=DIR P1.11=ENA GND=GND\n");
-        while (1) { k_msleep(1000); }
+    /* Initialize PCA9685 */
+    if (init_pca9685() < 0) {
+        printk("\n[FATAL] PCA9685 initialization failed\n");
+        printk("[FATAL] Check I2C wiring and pullups\n");
+        while (1) {
+            k_msleep(1000);
+        }
     }
 
-    printk("[READY] Motor ready. Starting test loop.\n\n");
-    run_motor_test(); /* loops forever */
-
-    /* ------------------------------------------------------------------ */
-#else
-    /* ---- SOLENOID TEST PATH ---- */
-
-    if (init_pca9685() < 0)
-        printk("[WARN] PCA9685 failed - check wiring\n");
-
+    /* Initialize solenoid data structures */
     init_solenoid_data();
-    sync_clock();
 
-    k_timer_start(&control_timer,
-                  K_MSEC(TIMER_PERIOD_MS), K_MSEC(TIMER_PERIOD_MS));
-    printk("[INIT] Control timer %dms kick=%dms min_hold=%d%%\n",
-           TIMER_PERIOD_MS, KICK_DURATION_MS, MIN_PWM_PERCENT);
+    /* Start control timer for kick->hold transitions */
+    k_timer_start(&control_timer, K_MSEC(TIMER_PERIOD_MS), K_MSEC(TIMER_PERIOD_MS));
+    printk("[INIT] Control timer started (%dms period)\n", TIMER_PERIOD_MS);
+    printk("[INIT] Kick duration: %dms\n", KICK_DURATION_MS);
+    printk("[INIT] Hold power: %d%% minimum\n\n", MIN_PWM_PERCENT);
 
-    init_event_buffer(&event_buffer);
-    printk("[INIT] Event buffer %d slots\n", EVENT_BUFFER_SIZE);
+    printk("[READY] System ready\n");
+    printk("[READY] Starting test sequence in 2 seconds...\n\n");
+    k_msleep(2000);
 
-    k_thread_create(&sequencer_thread, sequencer_stack,
-                    K_THREAD_STACK_SIZEOF(sequencer_stack),
-                    sequencer_loop, NULL, NULL, NULL,
-                    SEQUENCER_PRIORITY, 0, K_NO_WAIT);
-    k_thread_name_set(&sequencer_thread, "sequencer");
-    printk("[INIT] Sequencer started\n");
+    /* Run test sequence once */
+    run_solenoid_test_sequence();
 
-#if SAFE_TEST_MODE
-    printk("[WARN] SAFE_TEST_MODE=1 - no hardware output\n");
-#endif
-    printk("[READY] System ready\n\n");
+    /* Main processing loop */
+    printk("[INFO] Test complete. Entering main loop.\n");
+    printk("[INFO] Processing solenoid updates continuously...\n\n");
 
-    run_solenoid_test();
-
-#if ENABLE_UART_MODE
-    printk("UART KDAA V4.0. Full: S:H:N:V:T:D  Simple: NOTE:VEL\n\n");
-    if (!device_is_ready(uart_dev)) {
-        printk("[WARN] UART not ready\n");
-        uint32_t n = 0;
-        while (1) { printk("[HB] %u\n", n++); k_msleep(1000); }
-    }
-    uart_irq_callback_user_data_set(uart_dev, uart_cb, NULL);
-    uart_irq_rx_enable(uart_dev);
-    char msg[MSG_SIZE];
-    uint32_t hb = 0;
+    uint32_t heartbeat = 0;
     while (1) {
-        if (k_msgq_get(&uart_msgq, msg, K_MSEC(1000)) == 0)
-            parse_kdaa(msg);
-        else
-            printk("[HB] waiting (%u)\n", hb++);
+        /* Process any pending solenoid state changes */
+        process_solenoid_updates();
+        
+        /* Heartbeat every 5 seconds */
+        if ((k_uptime_get_32() % 5000) < 10) {
+            if (heartbeat % 100 == 0) {  /* Only print occasionally */
+                printk("[HB] Alive %u  (processing loop active)\n", heartbeat);
+            }
+            heartbeat++;
+        }
+        
+        /* Small delay to avoid busy-waiting */
+        k_msleep(1);
     }
-#else
-    printk("[INFO] Standalone. Set ENABLE_UART_MODE=1 for dashboard.\n\n");
-    uint32_t n = 0;
-    while (1) { printk("[HB] alive %u\n", n++); k_msleep(1000); }
-#endif
-
-#endif /* TEST_MODE / solenoid */
 
     return 0;
 }
