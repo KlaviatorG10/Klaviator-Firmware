@@ -1,3 +1,11 @@
+bootconf:
+  base_address: 0xffd080
+  default_driver_kconfig: ''
+  device: ''
+  dynamic_partition: null
+  name: bootconf
+  placement_strategy: start_to_end
+  size: 0x4
 flash_primary:
   base_address: 0x0
   default_driver_kconfig: CONFIG_SOC_FLASH_NRF_RRAM
@@ -5,7 +13,7 @@ flash_primary:
   dynamic_partition: null
   name: flash_primary
   placement_strategy: complex
-  size: 0x165000
+  size: 0x1fd000
 otp:
   base_address: 0xffd500
   default_driver_kconfig: ''
@@ -13,7 +21,7 @@ otp:
   dynamic_partition: null
   name: otp
   placement_strategy: start_to_end
-  size: 0x4fc
+  size: 0x47c
 sram_primary:
   base_address: 0x20000000
   default_driver_kconfig: ''
@@ -21,4 +29,4 @@ sram_primary:
   dynamic_partition: sram_primary
   name: sram_primary
   placement_strategy: complex
-  size: 0x2f000
+  size: 0x7fc00

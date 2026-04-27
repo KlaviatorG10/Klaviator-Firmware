@@ -1,8 +1,8 @@
-# Install script for directory: /opt/nordic/ncs/v2.9.2/zephyr/share/sysbuild/images
+# Install script for directory: /opt/nordic/ncs/v3.2.4/zephyr/share/sysbuild/images
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)
-  set(CMAKE_INSTALL_PREFIX "/opt/nordic/ncs/toolchains/b8efef2ad5")
+  set(CMAKE_INSTALL_PREFIX "/opt/nordic/ncs/toolchains/185bb0e3b6")
 endif()
 string(REGEX REPLACE "/$" "" CMAKE_INSTALL_PREFIX "${CMAKE_INSTALL_PREFIX}")
 
@@ -35,6 +35,11 @@ endif()
 if(NOT CMAKE_INSTALL_LOCAL_ONLY)
   # Include the install script for the subdirectory.
   include("/Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/_sysbuild/sysbuild/images/bootloader/cmake_install.cmake")
+endif()
+
+if(NOT CMAKE_INSTALL_LOCAL_ONLY)
+  # Include the install script for the subdirectory.
+  include("/Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/_sysbuild/sysbuild/images/firmware_loader/cmake_install.cmake")
 endif()
 
 if(NOT CMAKE_INSTALL_LOCAL_ONLY)

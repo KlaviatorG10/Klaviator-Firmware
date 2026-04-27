@@ -1,9 +1,12 @@
-menu "nrf (/opt/nordic/ncs/v2.9.2/nrf)"
-osource "/opt/nordic/ncs/v2.9.2/nrf/sysbuild/Kconfig.sysbuild"
+menu "nrf (/opt/nordic/ncs/v3.2.4/nrf)"
+osource "$(SYSBUILD_NRF_KCONFIG)"
 config ZEPHYR_NRF_MODULE
 	bool
 	default y
 endmenu
+config ZEPHYR_HOSTAP_MODULE
+   bool
+   default y
 config ZEPHYR_MCUBOOT_MODULE
    bool
    default y
@@ -19,9 +22,6 @@ config ZEPHYR_TRUSTED_FIRMWARE_M_MODULE
 config ZEPHYR_PSA_ARCH_TESTS_MODULE
    bool
    default y
-config ZEPHYR_SOC_HWMV1_MODULE
-   bool
-   default y
 config ZEPHYR_CJSON_MODULE
    bool
    default y
@@ -32,12 +32,6 @@ config ZEPHYR_CIRRUS_LOGIC_MODULE
    bool
    default y
 config ZEPHYR_OPENTHREAD_MODULE
-   bool
-   default y
-config ZEPHYR_SUIT_GENERATOR_MODULE
-   bool
-   default y
-config ZEPHYR_SUIT_PROCESSOR_MODULE
    bool
    default y
 config ZEPHYR_MEMFAULT_FIRMWARE_SDK_MODULE
@@ -55,9 +49,6 @@ config ZEPHYR_CHRE_MODULE
 config ZEPHYR_LZ4_MODULE
    bool
    default y
-config ZEPHYR_NANOPB_MODULE
-   bool
-   default y
 config ZEPHYR_TF_M_TESTS_MODULE
    bool
    default y
@@ -73,6 +64,9 @@ config ZEPHYR_CMSIS_DSP_MODULE
 config ZEPHYR_CMSIS_NN_MODULE
    bool
    default y
+config ZEPHYR_CMSIS_6_MODULE
+   bool
+   default y
 config ZEPHYR_FATFS_MODULE
    bool
    default y
@@ -82,16 +76,16 @@ config ZEPHYR_HAL_NORDIC_MODULE
 config ZEPHYR_HAL_ST_MODULE
    bool
    default y
+config ZEPHYR_HAL_TDK_MODULE
+   bool
+   default y
 config ZEPHYR_HAL_WURTHELEKTRONIK_MODULE
    bool
    default y
-config ZEPHYR_HOSTAP_MODULE
+config ZEPHYR_LIBLC3_MODULE
    bool
    default y
 config ZEPHYR_LIBMETAL_MODULE
-   bool
-   default y
-config ZEPHYR_LIBLC3_MODULE
    bool
    default y
 config ZEPHYR_LITTLEFS_MODULE
@@ -106,19 +100,22 @@ config ZEPHYR_LVGL_MODULE
 config ZEPHYR_MIPI_SYS_T_MODULE
    bool
    default y
+config ZEPHYR_NANOPB_MODULE
+   bool
+   default y
 config ZEPHYR_NRF_WIFI_MODULE
    bool
    default y
 config ZEPHYR_OPEN_AMP_MODULE
    bool
    default y
+config ZEPHYR_PERCEPIO_MODULE
+   bool
+   default y
 config ZEPHYR_PICOLIBC_MODULE
    bool
    default y
 config ZEPHYR_SEGGER_MODULE
-   bool
-   default y
-config ZEPHYR_TINYCRYPT_MODULE
    bool
    default y
 config ZEPHYR_UOSCORE_UEDHOC_MODULE

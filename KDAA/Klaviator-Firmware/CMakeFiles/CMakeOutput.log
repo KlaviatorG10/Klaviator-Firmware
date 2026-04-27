@@ -1,7 +1,7 @@
-The target system is: Generic - 3.7.99 - arm
+The target system is: Generic - 4.2.99 - arm
 The host system is: Darwin - 21.6.0 - x86_64
 Compiling the C compiler identification source file "CMakeCCompilerId.c" succeeded.
-Compiler: /opt/nordic/ncs/toolchains/b8efef2ad5/opt/zephyr-sdk/arm-zephyr-eabi/bin/arm-zephyr-eabi-gcc 
+Compiler: /opt/nordic/ncs/toolchains/185bb0e3b6/opt/zephyr-sdk/arm-zephyr-eabi/bin/arm-zephyr-eabi-gcc 
 Build flags: 
 Id flags: -c 
 
@@ -14,7 +14,7 @@ Compilation of the C compiler identification source "CMakeCCompilerId.c" produce
 The C compiler identification is GNU, found in "/Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/Klaviator-Firmware/CMakeFiles/3.21.0/CompilerIdC/CMakeCCompilerId.o"
 
 Compiling the CXX compiler identification source file "CMakeCXXCompilerId.cpp" succeeded.
-Compiler: /opt/nordic/ncs/toolchains/b8efef2ad5/opt/zephyr-sdk/arm-zephyr-eabi/bin/arm-zephyr-eabi-g++ 
+Compiler: /opt/nordic/ncs/toolchains/185bb0e3b6/opt/zephyr-sdk/arm-zephyr-eabi/bin/arm-zephyr-eabi-g++ 
 Build flags: 
 Id flags: -c 
 
@@ -32,3 +32,436 @@ Copyright (C) 2022 Free Software Foundation, Inc.
 This is free software; see the source for copying conditions.  There is NO
 warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
+Performing C SOURCE FILE Test check_C__nostartfiles__nostdlib__isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include___isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include_fixed___Wl___unresolved_symbols_ignore_in_object_files__Wl___entry_0__fuse_ld_bfd succeeded with the following output:
+Change Dir: /Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/Klaviator-Firmware/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/opt/nordic/ncs/toolchains/185bb0e3b6/bin/ninja cmTC_8596b && [1/2] Building C object CMakeFiles/cmTC_8596b.dir/src.c.obj
+[2/2] Linking C executable cmTC_8596b
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test check_Wall_C__nostartfiles__nostdlib__isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include___isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include_fixed___Wl___unresolved_symbols_ignore_in_object_files__Wl___entry_0__fuse_ld_bfd succeeded with the following output:
+Change Dir: /Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/Klaviator-Firmware/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/opt/nordic/ncs/toolchains/185bb0e3b6/bin/ninja cmTC_ec728 && [1/2] Building C object CMakeFiles/cmTC_ec728.dir/src.c.obj
+[2/2] Linking C executable cmTC_ec728
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test check_Wformat__Wformat_security_C__nostartfiles__nostdlib__isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include___isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include_fixed___Wl___unresolved_symbols_ignore_in_object_files__Wl___entry_0__fuse_ld_bfd succeeded with the following output:
+Change Dir: /Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/Klaviator-Firmware/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/opt/nordic/ncs/toolchains/185bb0e3b6/bin/ninja cmTC_290f3 && [1/2] Building C object CMakeFiles/cmTC_290f3.dir/src.c.obj
+[2/2] Linking C executable cmTC_290f3
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test check_Wformat__Wformat_zero_length_C__nostartfiles__nostdlib__isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include___isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include_fixed___Wl___unresolved_symbols_ignore_in_object_files__Wl___entry_0__fuse_ld_bfd succeeded with the following output:
+Change Dir: /Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/Klaviator-Firmware/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/opt/nordic/ncs/toolchains/185bb0e3b6/bin/ninja cmTC_02d4e && [1/2] Building C object CMakeFiles/cmTC_02d4e.dir/src.c.obj
+[2/2] Linking C executable cmTC_02d4e
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test check_Wdouble_promotion_C__nostartfiles__nostdlib__isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include___isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include_fixed___Wl___unresolved_symbols_ignore_in_object_files__Wl___entry_0__fuse_ld_bfd succeeded with the following output:
+Change Dir: /Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/Klaviator-Firmware/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/opt/nordic/ncs/toolchains/185bb0e3b6/bin/ninja cmTC_56280 && [1/2] Building C object CMakeFiles/cmTC_56280.dir/src.c.obj
+[2/2] Linking C executable cmTC_56280
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test check_Wpointer_sign_C__nostartfiles__nostdlib__isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include___isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include_fixed___Wl___unresolved_symbols_ignore_in_object_files__Wl___entry_0__fuse_ld_bfd succeeded with the following output:
+Change Dir: /Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/Klaviator-Firmware/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/opt/nordic/ncs/toolchains/185bb0e3b6/bin/ninja cmTC_e7696 && [1/2] Building C object CMakeFiles/cmTC_e7696.dir/src.c.obj
+[2/2] Linking C executable cmTC_e7696
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test check_Wpointer_arith_C__nostartfiles__nostdlib__isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include___isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include_fixed___Wl___unresolved_symbols_ignore_in_object_files__Wl___entry_0__fuse_ld_bfd succeeded with the following output:
+Change Dir: /Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/Klaviator-Firmware/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/opt/nordic/ncs/toolchains/185bb0e3b6/bin/ninja cmTC_23156 && [1/2] Building C object CMakeFiles/cmTC_23156.dir/src.c.obj
+[2/2] Linking C executable cmTC_23156
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test check_Wexpansion_to_defined_C__nostartfiles__nostdlib__isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include___isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include_fixed___Wl___unresolved_symbols_ignore_in_object_files__Wl___entry_0__fuse_ld_bfd succeeded with the following output:
+Change Dir: /Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/Klaviator-Firmware/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/opt/nordic/ncs/toolchains/185bb0e3b6/bin/ninja cmTC_38511 && [1/2] Building C object CMakeFiles/cmTC_38511.dir/src.c.obj
+[2/2] Linking C executable cmTC_38511
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test check_Wlogical_op_C__nostartfiles__nostdlib__isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include___isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include_fixed___Wl___unresolved_symbols_ignore_in_object_files__Wl___entry_0__fuse_ld_bfd succeeded with the following output:
+Change Dir: /Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/Klaviator-Firmware/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/opt/nordic/ncs/toolchains/185bb0e3b6/bin/ninja cmTC_0ac19 && [1/2] Building C object CMakeFiles/cmTC_0ac19.dir/src.c.obj
+[2/2] Linking C executable cmTC_0ac19
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test check_Wmissing_field_initializers_C__nostartfiles__nostdlib__isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include___isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include_fixed___Wl___unresolved_symbols_ignore_in_object_files__Wl___entry_0__fuse_ld_bfd succeeded with the following output:
+Change Dir: /Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/Klaviator-Firmware/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/opt/nordic/ncs/toolchains/185bb0e3b6/bin/ninja cmTC_cba6e && [1/2] Building C object CMakeFiles/cmTC_cba6e.dir/src.c.obj
+[2/2] Linking C executable cmTC_cba6e
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test check_Wpacked_bitfield_compat_C__nostartfiles__nostdlib__isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include___isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include_fixed___Wl___unresolved_symbols_ignore_in_object_files__Wl___entry_0__fuse_ld_bfd succeeded with the following output:
+Change Dir: /Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/Klaviator-Firmware/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/opt/nordic/ncs/toolchains/185bb0e3b6/bin/ninja cmTC_b4a5f && [1/2] Building C object CMakeFiles/cmTC_b4a5f.dir/src.c.obj
+[2/2] Linking C executable cmTC_b4a5f
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test check_Wvla_C__nostartfiles__nostdlib__isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include___isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include_fixed___Wl___unresolved_symbols_ignore_in_object_files__Wl___entry_0__fuse_ld_bfd succeeded with the following output:
+Change Dir: /Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/Klaviator-Firmware/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/opt/nordic/ncs/toolchains/185bb0e3b6/bin/ninja cmTC_dc95f && [1/2] Building C object CMakeFiles/cmTC_dc95f.dir/src.c.obj
+[2/2] Linking C executable cmTC_dc95f
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test check_Wunused_but_set_variable_C__nostartfiles__nostdlib__isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include___isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include_fixed___Wl___unresolved_symbols_ignore_in_object_files__Wl___entry_0__fuse_ld_bfd succeeded with the following output:
+Change Dir: /Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/Klaviator-Firmware/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/opt/nordic/ncs/toolchains/185bb0e3b6/bin/ninja cmTC_35999 && [1/2] Building C object CMakeFiles/cmTC_35999.dir/src.c.obj
+[2/2] Linking C executable cmTC_35999
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test check_Werror_implicit_int_C__nostartfiles__nostdlib__isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include___isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include_fixed___Wl___unresolved_symbols_ignore_in_object_files__Wl___entry_0__fuse_ld_bfd succeeded with the following output:
+Change Dir: /Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/Klaviator-Firmware/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/opt/nordic/ncs/toolchains/185bb0e3b6/bin/ninja cmTC_05fcd && [1/2] Building C object CMakeFiles/cmTC_05fcd.dir/src.c.obj
+[2/2] Linking C executable cmTC_05fcd
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test check_fno_printf_return_value_C__nostartfiles__nostdlib__isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include___isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include_fixed___Wl___unresolved_symbols_ignore_in_object_files__Wl___entry_0__fuse_ld_bfd succeeded with the following output:
+Change Dir: /Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/Klaviator-Firmware/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/opt/nordic/ncs/toolchains/185bb0e3b6/bin/ninja cmTC_14c68 && [1/2] Building C object CMakeFiles/cmTC_14c68.dir/src.c.obj
+[2/2] Linking C executable cmTC_14c68
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test check_mstack_protector_guard_global_C__nostartfiles__nostdlib__isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include___isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include_fixed___Wl___unresolved_symbols_ignore_in_object_files__Wl___entry_0__fuse_ld_bfd succeeded with the following output:
+Change Dir: /Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/Klaviator-Firmware/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/opt/nordic/ncs/toolchains/185bb0e3b6/bin/ninja cmTC_28cf2 && [1/2] Building C object CMakeFiles/cmTC_28cf2.dir/src.c.obj
+[2/2] Linking C executable cmTC_28cf2
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test check_fsanitize_undefined_C__nostartfiles__nostdlib__isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include___isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include_fixed___Wl___unresolved_symbols_ignore_in_object_files__Wl___entry_0__fuse_ld_bfd succeeded with the following output:
+Change Dir: /Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/Klaviator-Firmware/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/opt/nordic/ncs/toolchains/185bb0e3b6/bin/ninja cmTC_8e6a4 && [1/2] Building C object CMakeFiles/cmTC_8e6a4.dir/src.c.obj
+[2/2] Linking C executable cmTC_8e6a4
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test check_fsanitize_undefined_trap_on_error_C__nostartfiles__nostdlib__isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include___isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include_fixed___Wl___unresolved_symbols_ignore_in_object_files__Wl___entry_0__fuse_ld_bfd succeeded with the following output:
+Change Dir: /Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/Klaviator-Firmware/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/opt/nordic/ncs/toolchains/185bb0e3b6/bin/ninja cmTC_8d0e6 && [1/2] Building C object CMakeFiles/cmTC_8d0e6.dir/src.c.obj
+[2/2] Linking C executable cmTC_8d0e6
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test check_fno_freestanding_C__nostartfiles__nostdlib__isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include___isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include_fixed___Wl___unresolved_symbols_ignore_in_object_files__Wl___entry_0__fuse_ld_bfd succeeded with the following output:
+Change Dir: /Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/Klaviator-Firmware/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/opt/nordic/ncs/toolchains/185bb0e3b6/bin/ninja cmTC_52421 && [1/2] Building C object CMakeFiles/cmTC_52421.dir/src.c.obj
+[2/2] Linking C executable cmTC_52421
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test check_ffreestanding_C__nostartfiles__nostdlib__isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include___isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include_fixed___Wl___unresolved_symbols_ignore_in_object_files__Wl___entry_0__fuse_ld_bfd succeeded with the following output:
+Change Dir: /Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/Klaviator-Firmware/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/opt/nordic/ncs/toolchains/185bb0e3b6/bin/ninja cmTC_51aef && [1/2] Building C object CMakeFiles/cmTC_51aef.dir/src.c.obj
+[2/2] Linking C executable cmTC_51aef
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test check_gdwarf_4_C__nostartfiles__nostdlib__isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include___isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include_fixed___Wl___unresolved_symbols_ignore_in_object_files__Wl___entry_0__fuse_ld_bfd succeeded with the following output:
+Change Dir: /Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/Klaviator-Firmware/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/opt/nordic/ncs/toolchains/185bb0e3b6/bin/ninja cmTC_0d0c6 && [1/2] Building C object CMakeFiles/cmTC_0d0c6.dir/src.c.obj
+[2/2] Linking C executable cmTC_0d0c6
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test check_fdiagnostics_color_always_C__nostartfiles__nostdlib__isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include___isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include_fixed___Wl___unresolved_symbols_ignore_in_object_files__Wl___entry_0__fuse_ld_bfd succeeded with the following output:
+Change Dir: /Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/Klaviator-Firmware/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/opt/nordic/ncs/toolchains/185bb0e3b6/bin/ninja cmTC_b007a && [1/2] Building C object CMakeFiles/cmTC_b007a.dir/src.c.obj
+[2/2] Linking C executable cmTC_b007a
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test check_C__nostartfiles__nostdlib__isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include___isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include_fixed___Wl___unresolved_symbols_ignore_in_object_files__Wl___entry_0__fuse_ld_bfd__Wl___gc_sections succeeded with the following output:
+Change Dir: /Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/Klaviator-Firmware/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/opt/nordic/ncs/toolchains/185bb0e3b6/bin/ninja cmTC_9d74b && [1/2] Building C object CMakeFiles/cmTC_9d74b.dir/src.c.obj
+[2/2] Linking C executable cmTC_9d74b
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test check_C__nostartfiles__nostdlib__isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include___isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include_fixed___Wl___unresolved_symbols_ignore_in_object_files__Wl___entry_0__fuse_ld_bfd__Wl___build_id_none succeeded with the following output:
+Change Dir: /Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/Klaviator-Firmware/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/opt/nordic/ncs/toolchains/185bb0e3b6/bin/ninja cmTC_2f4eb && [1/2] Building C object CMakeFiles/cmTC_2f4eb.dir/src.c.obj
+[2/2] Linking C executable cmTC_2f4eb
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test check_C__nostartfiles__nostdlib__isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include___isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include_fixed___Wl___unresolved_symbols_ignore_in_object_files__Wl___entry_0__fuse_ld_bfd__nostdlib succeeded with the following output:
+Change Dir: /Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/Klaviator-Firmware/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/opt/nordic/ncs/toolchains/185bb0e3b6/bin/ninja cmTC_942a2 && [1/2] Building C object CMakeFiles/cmTC_942a2.dir/src.c.obj
+[2/2] Linking C executable cmTC_942a2
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test check_C__nostartfiles__nostdlib__isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include___isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include_fixed___Wl___unresolved_symbols_ignore_in_object_files__Wl___entry_0__fuse_ld_bfd__static succeeded with the following output:
+Change Dir: /Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/Klaviator-Firmware/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/opt/nordic/ncs/toolchains/185bb0e3b6/bin/ninja cmTC_daf0a && [1/2] Building C object CMakeFiles/cmTC_daf0a.dir/src.c.obj
+[2/2] Linking C executable cmTC_daf0a
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test check_C__nostartfiles__nostdlib__isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include___isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include_fixed___Wl___unresolved_symbols_ignore_in_object_files__Wl___entry_0__fuse_ld_bfd__Wl__X succeeded with the following output:
+Change Dir: /Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/Klaviator-Firmware/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/opt/nordic/ncs/toolchains/185bb0e3b6/bin/ninja cmTC_46975 && [1/2] Building C object CMakeFiles/cmTC_46975.dir/src.c.obj
+[2/2] Linking C executable cmTC_46975
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test check_C__nostartfiles__nostdlib__isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include___isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include_fixed___Wl___unresolved_symbols_ignore_in_object_files__Wl___entry_0__fuse_ld_bfd__Wl__N succeeded with the following output:
+Change Dir: /Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/Klaviator-Firmware/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/opt/nordic/ncs/toolchains/185bb0e3b6/bin/ninja cmTC_552b5 && [1/2] Building C object CMakeFiles/cmTC_552b5.dir/src.c.obj
+[2/2] Linking C executable cmTC_552b5
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test check_C__nostartfiles__nostdlib__isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include___isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include_fixed___Wl___unresolved_symbols_ignore_in_object_files__Wl___entry_0__fuse_ld_bfd__Wl___orphan_handling_warn succeeded with the following output:
+Change Dir: /Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/Klaviator-Firmware/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/opt/nordic/ncs/toolchains/185bb0e3b6/bin/ninja cmTC_fb32c && [1/2] Building C object CMakeFiles/cmTC_fb32c.dir/src.c.obj
+[2/2] Linking C executable cmTC_fb32c
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test check_C__nostartfiles__nostdlib__isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include___isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include_fixed___Wl___unresolved_symbols_ignore_in_object_files__Wl___entry_0__fuse_ld_bfd__Wl___orphan_handling_error succeeded with the following output:
+Change Dir: /Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/Klaviator-Firmware/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/opt/nordic/ncs/toolchains/185bb0e3b6/bin/ninja cmTC_f7a29 && [1/2] Building C object CMakeFiles/cmTC_f7a29.dir/src.c.obj
+[2/2] Linking C executable cmTC_f7a29
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test check_C__nostartfiles__nostdlib__isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include___isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include_fixed___Wl___unresolved_symbols_ignore_in_object_files__Wl___entry_0__fuse_ld_bfd__Wl___print_memory_usage succeeded with the following output:
+Change Dir: /Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/Klaviator-Firmware/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/opt/nordic/ncs/toolchains/185bb0e3b6/bin/ninja cmTC_8aefe && [1/2] Building C object CMakeFiles/cmTC_8aefe.dir/src.c.obj
+[2/2] Linking C executable cmTC_8aefe
+Memory region         Used Size  Region Size  %age Used
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test check_C__nostartfiles__nostdlib__isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include___isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include_fixed___Wl___unresolved_symbols_ignore_in_object_files__Wl___entry_0__fuse_ld_bfd__fsanitize_undefined succeeded with the following output:
+Change Dir: /Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/Klaviator-Firmware/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/opt/nordic/ncs/toolchains/185bb0e3b6/bin/ninja cmTC_32314 && [1/2] Building C object CMakeFiles/cmTC_32314.dir/src.c.obj
+[2/2] Linking C executable cmTC_32314
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test check_C__nostartfiles__nostdlib__isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include___isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include_fixed___Wl___unresolved_symbols_ignore_in_object_files__Wl___entry_0__fuse_ld_bfd__fsanitize_undefined_trap_on_error succeeded with the following output:
+Change Dir: /Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/Klaviator-Firmware/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/opt/nordic/ncs/toolchains/185bb0e3b6/bin/ninja cmTC_9095c && [1/2] Building C object CMakeFiles/cmTC_9095c.dir/src.c.obj
+[2/2] Linking C executable cmTC_9095c
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test check_C__nostartfiles__nostdlib__isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include___isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include_fixed___Wl___unresolved_symbols_ignore_in_object_files__Wl___entry_0__fuse_ld_bfd__Wl___no_relax succeeded with the following output:
+Change Dir: /Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/Klaviator-Firmware/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/opt/nordic/ncs/toolchains/185bb0e3b6/bin/ninja cmTC_36e10 && [1/2] Building C object CMakeFiles/cmTC_36e10.dir/src.c.obj
+[2/2] Linking C executable cmTC_36e10
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test check_C__nostartfiles__nostdlib__isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include___isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include_fixed___Wl___unresolved_symbols_ignore_in_object_files__Wl___entry_0__fuse_ld_bfd__Wl___sort_common_descending succeeded with the following output:
+Change Dir: /Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/Klaviator-Firmware/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/opt/nordic/ncs/toolchains/185bb0e3b6/bin/ninja cmTC_de7a6 && [1/2] Building C object CMakeFiles/cmTC_de7a6.dir/src.c.obj
+[2/2] Linking C executable cmTC_de7a6
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test check_C__nostartfiles__nostdlib__isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include___isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include_fixed___Wl___unresolved_symbols_ignore_in_object_files__Wl___entry_0__fuse_ld_bfd__Wl___sort_section_alignment succeeded with the following output:
+Change Dir: /Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/Klaviator-Firmware/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/opt/nordic/ncs/toolchains/185bb0e3b6/bin/ninja cmTC_2d245 && [1/2] Building C object CMakeFiles/cmTC_2d245.dir/src.c.obj
+[2/2] Linking C executable cmTC_2d245
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test check_C__nostartfiles__nostdlib__isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include___isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include_fixed___Wl___unresolved_symbols_ignore_in_object_files__Wl___entry_0__fuse_ld_bfd__pg succeeded with the following output:
+Change Dir: /Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/Klaviator-Firmware/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/opt/nordic/ncs/toolchains/185bb0e3b6/bin/ninja cmTC_2dbf1 && [1/2] Building C object CMakeFiles/cmTC_2dbf1.dir/src.c.obj
+[2/2] Linking C executable cmTC_2dbf1
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test check_C__nostartfiles__nostdlib__isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include___isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include_fixed___Wl___unresolved_symbols_ignore_in_object_files__Wl___entry_0__fuse_ld_bfd__mcpu_cortex_m33__mthumb__mabi_aapcs__mfp16_format_ieee__mtp_soft__fuse_ld_bfd succeeded with the following output:
+Change Dir: /Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/Klaviator-Firmware/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/opt/nordic/ncs/toolchains/185bb0e3b6/bin/ninja cmTC_9662b && [1/2] Building C object CMakeFiles/cmTC_9662b.dir/src.c.obj
+[2/2] Linking C executable cmTC_9662b
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test check_fno_asynchronous_unwind_tables_C__nostartfiles__nostdlib__isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include___isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include_fixed___Wl___unresolved_symbols_ignore_in_object_files__Wl___entry_0__fuse_ld_bfd succeeded with the following output:
+Change Dir: /Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/Klaviator-Firmware/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/opt/nordic/ncs/toolchains/185bb0e3b6/bin/ninja cmTC_2d5bb && [1/2] Building C object CMakeFiles/cmTC_2d5bb.dir/src.c.obj
+[2/2] Linking C executable cmTC_2d5bb
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test check_ftls_model_local_exec_C__nostartfiles__nostdlib__isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include___isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include_fixed___Wl___unresolved_symbols_ignore_in_object_files__Wl___entry_0__fuse_ld_bfd succeeded with the following output:
+Change Dir: /Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/Klaviator-Firmware/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/opt/nordic/ncs/toolchains/185bb0e3b6/bin/ninja cmTC_507de && [1/2] Building C object CMakeFiles/cmTC_507de.dir/src.c.obj
+[2/2] Linking C executable cmTC_507de
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test check_fno_reorder_functions_C__nostartfiles__nostdlib__isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include___isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include_fixed___Wl___unresolved_symbols_ignore_in_object_files__Wl___entry_0__fuse_ld_bfd succeeded with the following output:
+Change Dir: /Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/Klaviator-Firmware/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/opt/nordic/ncs/toolchains/185bb0e3b6/bin/ninja cmTC_451e0 && [1/2] Building C object CMakeFiles/cmTC_451e0.dir/src.c.obj
+[2/2] Linking C executable cmTC_451e0
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test check__param_min_pagesize_0_C__nostartfiles__nostdlib__isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include___isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include_fixed___Wl___unresolved_symbols_ignore_in_object_files__Wl___entry_0__fuse_ld_bfd succeeded with the following output:
+Change Dir: /Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/Klaviator-Firmware/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/opt/nordic/ncs/toolchains/185bb0e3b6/bin/ninja cmTC_d0ab7 && [1/2] Building C object CMakeFiles/cmTC_d0ab7.dir/src.c.obj
+[2/2] Linking C executable cmTC_d0ab7
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test check_fno_defer_pop_C__nostartfiles__nostdlib__isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include___isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include_fixed___Wl___unresolved_symbols_ignore_in_object_files__Wl___entry_0__fuse_ld_bfd succeeded with the following output:
+Change Dir: /Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/Klaviator-Firmware/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/opt/nordic/ncs/toolchains/185bb0e3b6/bin/ninja cmTC_13de4 && [1/2] Building C object CMakeFiles/cmTC_13de4.dir/src.c.obj
+[2/2] Linking C executable cmTC_13de4
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test check_fmacro_prefix_map__Users_yousef_Documents_GitHub_Klaviator_Firmware_CMAKE_SOURCE_DIR_C__nostartfiles__nostdlib__isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include___isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include_fixed___Wl___unresolved_symbols_ignore_in_object_files__Wl___entry_0__fuse_ld_bfd succeeded with the following output:
+Change Dir: /Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/Klaviator-Firmware/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/opt/nordic/ncs/toolchains/185bb0e3b6/bin/ninja cmTC_7f79e && [1/2] Building C object CMakeFiles/cmTC_7f79e.dir/src.c.obj
+[2/2] Linking C executable cmTC_7f79e
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test check_fmacro_prefix_map__opt_nordic_ncs_v3_2_4_zephyr_ZEPHYR_BASE_C__nostartfiles__nostdlib__isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include___isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include_fixed___Wl___unresolved_symbols_ignore_in_object_files__Wl___entry_0__fuse_ld_bfd succeeded with the following output:
+Change Dir: /Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/Klaviator-Firmware/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/opt/nordic/ncs/toolchains/185bb0e3b6/bin/ninja cmTC_be21f && [1/2] Building C object CMakeFiles/cmTC_be21f.dir/src.c.obj
+[2/2] Linking C executable cmTC_be21f
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test check_fmacro_prefix_map__opt_nordic_ncs_v3_2_4_WEST_TOPDIR_C__nostartfiles__nostdlib__isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include___isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include_fixed___Wl___unresolved_symbols_ignore_in_object_files__Wl___entry_0__fuse_ld_bfd succeeded with the following output:
+Change Dir: /Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/Klaviator-Firmware/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/opt/nordic/ncs/toolchains/185bb0e3b6/bin/ninja cmTC_9970d && [1/2] Building C object CMakeFiles/cmTC_9970d.dir/src.c.obj
+[2/2] Linking C executable cmTC_9970d
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test check_ffunction_sections_C__nostartfiles__nostdlib__isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include___isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include_fixed___Wl___unresolved_symbols_ignore_in_object_files__Wl___entry_0__fuse_ld_bfd succeeded with the following output:
+Change Dir: /Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/Klaviator-Firmware/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/opt/nordic/ncs/toolchains/185bb0e3b6/bin/ninja cmTC_b6a03 && [1/2] Building C object CMakeFiles/cmTC_b6a03.dir/src.c.obj
+[2/2] Linking C executable cmTC_b6a03
+
+
+Source file was:
+int main(void) { return 0; }
+Performing C SOURCE FILE Test check_fdata_sections_C__nostartfiles__nostdlib__isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include___isystem___opt_nordic_ncs_toolchains_185bb0e3b6_opt_zephyr_sdk_arm_zephyr_eabi_bin____lib_gcc_arm_zephyr_eabi_12_2_0_include_fixed___Wl___unresolved_symbols_ignore_in_object_files__Wl___entry_0__fuse_ld_bfd succeeded with the following output:
+Change Dir: /Users/yousef/Documents/GitHub/Klaviator-Firmware/KDAA/Klaviator-Firmware/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/opt/nordic/ncs/toolchains/185bb0e3b6/bin/ninja cmTC_5ed66 && [1/2] Building C object CMakeFiles/cmTC_5ed66.dir/src.c.obj
+[2/2] Linking C executable cmTC_5ed66
+
+
+Source file was:
+int main(void) { return 0; }

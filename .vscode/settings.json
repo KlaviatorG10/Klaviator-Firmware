@@ -1,0 +1,6 @@
+{
+    "serialMonitor.baudRate": 1000000,
+    "nrf-connect.serialTerminal.baudRate": 1000000,
+    "nrf-connect.serialTerminal.hardwareFlowControl": true,
+    "serialMonitor.hardwareFlowControl": true
+}
