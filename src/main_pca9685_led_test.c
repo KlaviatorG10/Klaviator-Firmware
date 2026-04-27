@@ -401,14 +401,7 @@ static void sequencer_loop(void *a1, void *a2, void *a3) {
             if (now < ev.target_time_ms) break;
             pop_event(&event_buffer, &ev);
             switch (ev.type) {
-
-            case EVENT_MOVE:
-                printk("[EXEC] #%u MOVE hand=%c pos=%d T=%u actual=%u delta=%d\n",
-                       ev.sequence_number, ev.hand, ev.solenoid_number,
-                       ev.target_time_ms, now, (int)(now - ev.target_time_ms));
-                break;
             case EVENT_STRIKE:
-
                 if (ev.solenoid_number < TOTAL_SOLENOIDS) {
                     activate_solenoid(ev.solenoid_number,
                                       ev.velocity, ev.duration_ms);
@@ -466,101 +459,25 @@ static void uart_cb(const struct device *dev, void *user_data) {
 }
 
 static void parse_kdaa(char *msg) {
-    int seq, note, vel, t_ms, dur;
-    char hand;
-
-    if (strncmp(msg, "SYNC", 4) == 0) {
-        sync_clock();
-        printk("[MCU] SYNC OK - Clock Reset
-");
-        return;
-    }
-
-    if (strcmp(msg, "STOP") == 0 || strcasecmp(msg, "all:0") == 0) {
-        deactivate_all_solenoids();
-        init_event_buffer(&event_buffer);
-        printk("[MCU] HALTED
-");
-        return;
-    }
-
-    /* M:H:P:T - MOVE command */
-    if (msg[0] == 'M' && msg[1] == ':') {
-        int p; uint32_t t;
-        if (sscanf(msg, "M:%c:%d:%u", &hand, &p, &t) == 3) {
-            kdaa_event_t ev = {
-                .type = EVENT_MOVE,
-                .target_time_ms = t,
-                .hand = hand,
-                .solenoid_number = p,
-                .sequence_number = 0
-            };
-            add_event(&event_buffer, &ev);
-            return;
-        }
-    }
-
-    /* S:H:N:V:T:D - STRIKE command */
-    if (msg[0] == 'S' && msg[1] == ':') {
-        if (sscanf(msg, "S:%c:%d:%d:%d:%d", &hand, &note, &vel, &t_ms, &dur) == 5) {
-            int sol = note - BASE_MIDI_NOTE;
-            if (sol >= 0 && sol < TOTAL_SOLENOIDS && vel >= 0 && vel <= 127) {
-                kdaa_event_t ev = {
-                    .type = EVENT_STRIKE,
-                    .target_time_ms = t_ms,
-                    .solenoid_number = (uint8_t)sol,
-                    .velocity = (uint8_t)vel,
-                    .duration_ms = (uint16_t)dur,
-                    .hand = hand
-                };
-                add_event(&event_buffer, &ev);
-            } else {
-                printk("[ERR] Invalid note/velocity
-");
-            }
-            return;
-        }
-        /* Fallback to S:H:N:V:T */
-        if (sscanf(msg, "S:%c:%d:%d:%d", &hand, &note, &vel, &t_ms) == 4) {
-            int sol = note - BASE_MIDI_NOTE;
-            if (sol >= 0 && sol < TOTAL_SOLENOIDS && vel >= 0 && vel <= 127) {
-                kdaa_event_t ev = {
-                    .type = EVENT_STRIKE,
-                    .target_time_ms = t_ms,
-                    .solenoid_number = (uint8_t)sol,
-                    .velocity = (uint8_t)vel,
-                    .duration_ms = 50,
-                    .hand = hand
-                };
-                add_event(&event_buffer, &ev);
-            } else {
-                printk("[ERR] Invalid note/velocity
-");
-            }
-            return;
-        }
-    }
-
-    /* Legacy formats for colleague's testing */
-    if (sscanf(msg, "%d:%d:%d:%d:%d:%d", &seq, &hand, &note, &vel, &t_ms, &dur) == 6) {
+    int seq, hand, note, vel, t_ms, dur;
+    if (!strcasecmp(msg, "sync"))  { sync_clock();               return; }
+    if (!strcasecmp(msg, "all:0")) { deactivate_all_solenoids(); return; }
+    if (sscanf(msg, "%d:%d:%d:%d:%d:%d",
+               &seq, &hand, &note, &vel, &t_ms, &dur) == 6) {
         int sol = note - BASE_MIDI_NOTE;
         if (sol >= 0 && sol < TOTAL_SOLENOIDS && vel >= 0 && vel <= 127)
-            queue_strike(seq, t_ms, (uint8_t)sol, (uint8_t)vel, (uint16_t)dur);
-        else printk("[ERR] Invalid note/velocity
-");
+            activate_solenoid((uint8_t)sol, (uint8_t)vel, (uint32_t)dur);
+        else printk("[ERR] Invalid note/velocity\n");
         return;
     }
-
     if (sscanf(msg, "%d:%d", &note, &vel) == 2) {
         int sol = note - BASE_MIDI_NOTE;
         if (sol >= 0 && sol < TOTAL_SOLENOIDS && vel >= 0 && vel <= 127)
             activate_solenoid((uint8_t)sol, (uint8_t)vel, 0);
-        else printk("[ERR] Invalid note/velocity
-");
+        else printk("[ERR] Invalid note/velocity\n");
         return;
     }
-    printk("[ERR] Use S:H:N:V:T:D or M:H:P:T or NOTE:VEL
-");
+    printk("[ERR] Use S:H:N:V:T:D or NOTE:VEL\n");
 }
 #endif
 
