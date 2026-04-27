@@ -1,3 +1,8 @@
+/*
+ * Device tree overlay for DM860E stepper motor driver and PCA9685
+ * KDAA UART 1M Baud with HW Flow Control
+ */
+
 / {
 	chosen {
 		zephyr,console = &uart20;
@@ -7,16 +12,19 @@
 	solenoids {
 		compatible = "gpio-leds";
 		solenoid0: solenoid_0 {
-			/* Physical Solenoid on Pin P0.13 */
+			/* Physical Solenoid on Pin P0.13 (Fallback if not PCA) */
 			gpios = <&gpio0 13 GPIO_ACTIVE_HIGH>;
 			label = "Solenoid 0";
 		};
 	};
 
 	aliases {
-		/* Point solenoid to external Pin P0.13 */
 		solenoid = &solenoid0;
 	};
+};
+
+&gpio1 {
+    status = "okay";
 };
 
 &uart20 {
@@ -24,7 +32,3 @@
 	current-speed = <1000000>;
 	hw-flow-control;
 };
-
-
-
-

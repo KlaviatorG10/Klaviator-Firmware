@@ -1,2 +1,0 @@
-# Load board Kconfig descriptions.
-osource "/opt/nordic/ncs/v3.2.4/zephyr/boards/nordic/nrf54lm20dk/Kconfig.nrf54lm20dk"
