@@ -14,8 +14,14 @@
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/uart.h>
+#include <zephyr/drivers/gpio.h>
 
 #define UART_DEVICE_NODE DT_CHOSEN(zephyr_console)
+
+/* Solenoid definition from Device Tree alias */
+#define SOLENOID_NODE DT_ALIAS(solenoid)
+static const struct gpio_dt_spec solenoid = GPIO_DT_SPEC_GET(SOLENOID_NODE, gpios);
+
 #define MSG_SIZE 64
 #define BUFFER_SIZE 256 // Plass til 256 planlagte hendelser i køen
 
@@ -64,7 +70,13 @@ void sequencer_loop(void *unused1, void *unused2, void *unused3) {
                         printk("[EXEC] MOVE Hand:%c Pos:%d @ T:%u\n", 
                                event_buffer[i].hand, event_buffer[i].val1, now);
                     } else {
-                        // HER KOMMER SOLENOID-LOGIKK FRA PARTNER
+                        // UTFØR STRIKE MED SOLENOID
+                        if (event_buffer[i].val2 > 0) {
+                            gpio_pin_set_dt(&solenoid, 1);
+                        } else {
+                            gpio_pin_set_dt(&solenoid, 0);
+                        }
+                        
                         printk("[EXEC] STRIKE Hand:%c Note:%d Vel:%d @ T:%u\n", 
                                event_buffer[i].hand, event_buffer[i].val1, event_buffer[i].val2, now);
                     }
@@ -97,6 +109,7 @@ void parse_kdaa_cmd(char *msg) {
     if (strcmp(msg, "STOP") == 0) {
         is_running = false;
         for(int i=0; i<BUFFER_SIZE; i++) event_buffer[i].active = false;
+        gpio_pin_set_dt(&solenoid, 0); // Sikkerhet: skru av solenoid
         printk("[MCU] HALTED\n");
         return;
     }
@@ -156,7 +169,29 @@ void uart_cb(const struct device *dev, void *user_data) {
 }
 
 int main(void) {
-    if (!device_is_ready(uart_dev)) return 0;
+    /* Test visual boot indicator (LED0) */
+    const struct gpio_dt_spec led = GPIO_DT_SPEC_GET(DT_ALIAS(led0), gpios);
+    if (gpio_is_ready_dt(&led)) {
+        gpio_pin_configure_dt(&led, GPIO_OUTPUT_ACTIVE);
+        k_msleep(500); /* LED is ON for 0.5s during boot */
+        gpio_pin_set_dt(&led, 0);
+    }
+
+    k_msleep(1000); /* Wait for terminal to connect over USB */
+    printk("\n--- KDAA Firmware Booting ---\n");
+
+    if (!device_is_ready(uart_dev)) {
+        printk("Error: UART device not ready\n");
+        return 0;
+    }
+
+    /* Initialize the solenoid GPIO */
+    if (!gpio_is_ready_dt(&solenoid)) {
+        printk("Error: Solenoid device not ready\n");
+        return 0;
+    }
+    gpio_pin_configure_dt(&solenoid, GPIO_OUTPUT_INACTIVE);
+
     uart_irq_callback_user_data_set(uart_dev, uart_cb, NULL);
     uart_irq_rx_enable(uart_dev);
 
