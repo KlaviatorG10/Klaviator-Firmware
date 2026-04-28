@@ -43,6 +43,7 @@
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/drivers/uart.h>
 #include <zephyr/drivers/i2c.h>
+#include <strings.h>
 
 /* =============================================================================
  * >>>  SET THIS TO CHOOSE WHAT RUNS ON BOOT  <<<
@@ -50,14 +51,16 @@
  *   1 = DM860E stepper motor test
  *   0 = PCA9685 solenoid test
  * ============================================================================= */
-#define TEST_MODE           1
+#define TEST_MODE           0
 
 /* =============================================================================
  * GENERAL CONFIGURATION
  * ============================================================================= */
 
 #define SAFE_TEST_MODE      0   /* 0 = real hardware, 1 = print only */
-#define ENABLE_UART_MODE    0   /* 0 = standalone, 1 = KDAA dashboard */
+#define ENABLE_UART_MODE    1   /* 0 = standalone, 1 = KDAA dashboard */
+
+static void queue_strike(uint16_t seq, uint32_t t, uint8_t sol, uint8_t vel, uint16_t dur);
 
 /* =============================================================================
  * MOTOR CONFIGURATION  (used when TEST_MODE=1)
@@ -123,14 +126,14 @@ typedef enum { EVENT_SYNC, EVENT_STOP, EVENT_MOVE, EVENT_STRIKE } event_type_t;
 typedef struct {
     event_type_t type;
     uint32_t     target_time_ms;
-    uint8_t      solenoid_number;
+    uint8_t      note_number;
     uint8_t      velocity;
     uint16_t     duration_ms;
     uint16_t     sequence_number;
     uint8_t      hand;
 } kdaa_event_t;
 
-#define EVENT_BUFFER_SIZE 256
+#define EVENT_BUFFER_SIZE 2048
 typedef struct {
     kdaa_event_t      events[EVENT_BUFFER_SIZE];
     volatile uint16_t write_index, read_index, count;
@@ -211,7 +214,7 @@ static struct k_thread sequencer_thread;
 
 #if ENABLE_UART_MODE
 #define MSG_SIZE 128
-K_MSGQ_DEFINE(uart_msgq, MSG_SIZE, 10, 4);
+K_MSGQ_DEFINE(uart_msgq, MSG_SIZE, 256, 4);
 static const struct device *const uart_dev =
     DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
 static char rx_buf[MSG_SIZE];
@@ -225,7 +228,7 @@ static int  rx_pos = 0;
 static int pca9685_write_reg(uint8_t reg, uint8_t val) {
     uint8_t buf[2] = { reg, val };
     int ret = i2c_write(i2c_device, buf, 2, PCA9685_I2C_ADDR);
-    if (ret) printk("[ERROR] PCA9685 reg=0x%02X val=0x%02X err=%d\n", reg, val, ret);
+    /* if (ret) printk("[ERROR] PCA9685 reg=0x%02X val=0x%02X err=%d\n", reg, val, ret); */
     return ret;
 }
 
@@ -239,7 +242,7 @@ static int pca9685_set_channel(uint8_t ch, uint16_t v) {
     else                           { buf[1]=0x00; buf[2]=0x00;
                                      buf[3]=(uint8_t)(v & 0xFF); buf[4]=(uint8_t)(v >> 8); }
     int ret = i2c_write(i2c_device, buf, 5, PCA9685_I2C_ADDR);
-    if (ret) printk("[ERROR] PCA9685 ch=%d val=%u err=%d\n", ch, v, ret);
+    /* if (ret) printk("[ERROR] PCA9685 ch=%d val=%u err=%d\n", ch, v, ret); */
     return ret;
 }
 
@@ -404,22 +407,18 @@ static void sequencer_loop(void *a1, void *a2, void *a3) {
 
             case EVENT_MOVE:
                 printk("[EXEC] #%u MOVE hand=%c pos=%d T=%u actual=%u delta=%d\n",
-                       ev.sequence_number, ev.hand, ev.solenoid_number,
+                       ev.sequence_number, ev.hand, ev.note_number,
                        ev.target_time_ms, now, (int)(now - ev.target_time_ms));
                 break;
-            case EVENT_STRIKE:
-
-                if (ev.solenoid_number < TOTAL_SOLENOIDS) {
-                    activate_solenoid(ev.solenoid_number,
+            case EVENT_STRIKE: {
+                int sol_idx = ev.note_number - BASE_MIDI_NOTE;
+                if (sol_idx >= 0 && sol_idx < TOTAL_SOLENOIDS) {
+                    activate_solenoid((uint8_t)sol_idx,
                                       ev.velocity, ev.duration_ms);
-                    printk("[EXEC] #%u STRIKE sol=%2d vel=%3d dur=%4dms"
-                           " T=%u actual=%u delta=%d\n",
-                           ev.sequence_number, ev.solenoid_number,
-                           ev.velocity, ev.duration_ms,
-                           ev.target_time_ms, now,
-                           (int)(now - ev.target_time_ms));
                 }
+                printk("HIT:%d\n", ev.note_number);
                 break;
+            }
             case EVENT_STOP:
                 printk("[EXEC] #%u STOP\n", ev.sequence_number);
                 clear_events(&event_buffer);
@@ -429,10 +428,7 @@ static void sequencer_loop(void *a1, void *a2, void *a3) {
                 printk("[EXEC] #%u SYNC\n", ev.sequence_number);
                 sync_clock();
                 break;
-            case EVENT_MOVE:
-                printk("[EXEC] #%u MOVE hand=%d pos=%d\n",
-                       ev.sequence_number, ev.hand, ev.solenoid_number);
-                break;
+
             default:
                 printk("[ERROR] Unknown event %d\n", ev.type);
                 break;
@@ -470,17 +466,16 @@ static void parse_kdaa(char *msg) {
     char hand;
 
     if (strncmp(msg, "SYNC", 4) == 0) {
+        clear_events(&event_buffer);
         sync_clock();
-        printk("[MCU] SYNC OK - Clock Reset
-");
+        printk("[MCU] SYNC OK - Clock Reset\n");
         return;
     }
 
     if (strcmp(msg, "STOP") == 0 || strcasecmp(msg, "all:0") == 0) {
         deactivate_all_solenoids();
         init_event_buffer(&event_buffer);
-        printk("[MCU] HALTED
-");
+        printk("[MCU] HALTED\n");
         return;
     }
 
@@ -492,7 +487,7 @@ static void parse_kdaa(char *msg) {
                 .type = EVENT_MOVE,
                 .target_time_ms = t,
                 .hand = hand,
-                .solenoid_number = p,
+                .note_number = p,
                 .sequence_number = 0
             };
             add_event(&event_buffer, &ev);
@@ -503,64 +498,62 @@ static void parse_kdaa(char *msg) {
     /* S:H:N:V:T:D - STRIKE command */
     if (msg[0] == 'S' && msg[1] == ':') {
         if (sscanf(msg, "S:%c:%d:%d:%d:%d", &hand, &note, &vel, &t_ms, &dur) == 5) {
-            int sol = note - BASE_MIDI_NOTE;
-            if (sol >= 0 && sol < TOTAL_SOLENOIDS && vel >= 0 && vel <= 127) {
+            if (note >= 0 && note <= 127 && vel >= 0 && vel <= 127) {
                 kdaa_event_t ev = {
                     .type = EVENT_STRIKE,
                     .target_time_ms = t_ms,
-                    .solenoid_number = (uint8_t)sol,
+                    .note_number = (uint8_t)note,
                     .velocity = (uint8_t)vel,
                     .duration_ms = (uint16_t)dur,
                     .hand = hand
                 };
                 add_event(&event_buffer, &ev);
             } else {
-                printk("[ERR] Invalid note/velocity
-");
+                printk("[ERR] Invalid note/velocity\n");
             }
             return;
         }
         /* Fallback to S:H:N:V:T */
         if (sscanf(msg, "S:%c:%d:%d:%d", &hand, &note, &vel, &t_ms) == 4) {
-            int sol = note - BASE_MIDI_NOTE;
-            if (sol >= 0 && sol < TOTAL_SOLENOIDS && vel >= 0 && vel <= 127) {
+            if (note >= 0 && note <= 127 && vel >= 0 && vel <= 127) {
                 kdaa_event_t ev = {
                     .type = EVENT_STRIKE,
                     .target_time_ms = t_ms,
-                    .solenoid_number = (uint8_t)sol,
+                    .note_number = (uint8_t)note,
                     .velocity = (uint8_t)vel,
                     .duration_ms = 50,
                     .hand = hand
                 };
                 add_event(&event_buffer, &ev);
             } else {
-                printk("[ERR] Invalid note/velocity
-");
+                printk("[ERR] Invalid note/velocity\n");
             }
             return;
         }
     }
 
     /* Legacy formats for colleague's testing */
-    if (sscanf(msg, "%d:%d:%d:%d:%d:%d", &seq, &hand, &note, &vel, &t_ms, &dur) == 6) {
-        int sol = note - BASE_MIDI_NOTE;
-        if (sol >= 0 && sol < TOTAL_SOLENOIDS && vel >= 0 && vel <= 127)
-            queue_strike(seq, t_ms, (uint8_t)sol, (uint8_t)vel, (uint16_t)dur);
-        else printk("[ERR] Invalid note/velocity
-");
+    int hand_int;
+    if (sscanf(msg, "%d:%d:%d:%d:%d:%d", &seq, &hand_int, &note, &vel, &t_ms, &dur) == 6) {
+        hand = (char)hand_int;
+        if (note >= 0 && note <= 127 && vel >= 0 && vel <= 127)
+            queue_strike(seq, t_ms, (uint8_t)note, (uint8_t)vel, (uint16_t)dur);
+        else printk("[ERR] Invalid note/velocity\n");
         return;
     }
 
     if (sscanf(msg, "%d:%d", &note, &vel) == 2) {
-        int sol = note - BASE_MIDI_NOTE;
-        if (sol >= 0 && sol < TOTAL_SOLENOIDS && vel >= 0 && vel <= 127)
-            activate_solenoid((uint8_t)sol, (uint8_t)vel, 0);
-        else printk("[ERR] Invalid note/velocity
-");
+        if (note >= 0 && note <= 127 && vel >= 0 && vel <= 127) {
+            int sol_idx = note - BASE_MIDI_NOTE;
+            if (sol_idx >= 0 && sol_idx < TOTAL_SOLENOIDS) {
+                activate_solenoid((uint8_t)sol_idx, (uint8_t)vel, 0);
+            }
+            /* Direct hit not queued, but we could print it. Legacy format anyway. */
+        }
+        else printk("[ERR] Invalid note/velocity\n");
         return;
     }
-    printk("[ERR] Use S:H:N:V:T:D or M:H:P:T or NOTE:VEL
-");
+    printk("[ERR] Use S:H:N:V:T:D or M:H:P:T or NOTE:VEL\n");
 }
 #endif
 
@@ -653,11 +646,11 @@ static void run_motor_test(void) {
 #if !TEST_MODE
 
 static void queue_strike(uint16_t seq, uint32_t t,
-                         uint8_t sol, uint8_t vel, uint16_t dur) {
+                         uint8_t note, uint8_t vel, uint16_t dur) {
     kdaa_event_t ev = {
         .type            = EVENT_STRIKE,
         .target_time_ms  = t,
-        .solenoid_number = sol,
+        .note_number     = note,
         .velocity        = vel,
         .duration_ms     = dur,
         .sequence_number = seq,
@@ -681,20 +674,20 @@ static void run_solenoid_test(void) {
 
     uint16_t seq = 1;
 
-    queue_strike(seq++,  500, 0,  30,  80);
-    queue_strike(seq++, 1200, 0,  64,  80);
-    queue_strike(seq++, 2000, 0, 127,  80);
-    queue_strike(seq++, 3000, 0,  90, 500);
-    queue_strike(seq++, 4000, 0, 100,  60);
-    queue_strike(seq++, 4080, 0, 100,  60);
-    queue_strike(seq++, 4160, 0, 100,  60);
-    queue_strike(seq++, 4240, 0, 100,  60);
+    queue_strike(seq++,  500, BASE_MIDI_NOTE + 0,  30,  80);
+    queue_strike(seq++, 1200, BASE_MIDI_NOTE + 0,  64,  80);
+    queue_strike(seq++, 2000, BASE_MIDI_NOTE + 0, 127,  80);
+    queue_strike(seq++, 3000, BASE_MIDI_NOTE + 0,  90, 500);
+    queue_strike(seq++, 4000, BASE_MIDI_NOTE + 0, 100,  60);
+    queue_strike(seq++, 4080, BASE_MIDI_NOTE + 0, 100,  60);
+    queue_strike(seq++, 4160, BASE_MIDI_NOTE + 0, 100,  60);
+    queue_strike(seq++, 4240, BASE_MIDI_NOTE + 0, 100,  60);
 
     for (int i = 0; i < TOTAL_SOLENOIDS; i++)
-        queue_strike(seq++, (uint32_t)(5500 + i * 200), (uint8_t)i, 90, 120);
+        queue_strike(seq++, (uint32_t)(5500 + i * 200), (uint8_t)(BASE_MIDI_NOTE + i), 90, 120);
 
     for (int i = 0; i < TOTAL_SOLENOIDS; i++)
-        queue_strike(seq++, (uint32_t)(9000 + i * 200), (uint8_t)i, 70, 100);
+        queue_strike(seq++, (uint32_t)(9000 + i * 200), (uint8_t)(BASE_MIDI_NOTE + i), 70, 100);
 
     kdaa_event_t stop = {
         .type           = EVENT_STOP,
@@ -722,7 +715,7 @@ int main(void)
 #if TEST_MODE
     printk("║  MODE: DM860E MOTOR TEST                            ║\n");
 #else
-    printk("║  MODE: PCA9685 SOLENOID TEST                        ║\n");
+    printk("║  MODE: KLAVIATOR MIDI SEQUENCER                     ║\n");
 #endif
 
     printk("╚══════════════════════════════════════════════════════╝\n\n");
@@ -772,7 +765,7 @@ int main(void)
 #endif
     printk("[READY] System ready\n\n");
 
-    run_solenoid_test();
+    /* run_solenoid_test(); - Removed to prevent interference with MIDI playback */
 
 #if ENABLE_UART_MODE
     printk("UART KDAA V4.0. Full: S:H:N:V:T:D  Simple: NOTE:VEL\n\n");
