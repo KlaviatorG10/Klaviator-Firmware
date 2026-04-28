@@ -3,6 +3,11 @@
 # =============================================================================
 cmake_minimum_required(VERSION 3.20.0)
 
+# Disable ccache (must be before find_package)
+set(CMAKE_C_COMPILER_LAUNCHER "")
+set(CMAKE_CXX_COMPILER_LAUNCHER "")
+set(CCACHE_PROGRAM "CCACHE_PROGRAM-NOTFOUND")
+
 set(DTC_OVERLAY_FILE "${CMAKE_CURRENT_SOURCE_DIR}/app.overlay")
 
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
