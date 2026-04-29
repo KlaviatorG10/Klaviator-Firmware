@@ -1,0 +1,7 @@
+default: Klaviator-Firmware
+build_dir: C:/Users/early/Documents/GitHub/Klaviator-Firmware/build_1
+domains:
+  - name: Klaviator-Firmware
+    build_dir: C:/Users/early/Documents/GitHub/Klaviator-Firmware/build_1/Klaviator-Firmware
+flash_order:
+  - Klaviator-Firmware

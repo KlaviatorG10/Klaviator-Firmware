@@ -1,49 +1,64 @@
 /*
- * Device tree overlay for Klaviator Firmware
- * - GPIO pins for stepper motor (STEP, DIR, ENABLE)
- * - I2C pins for PCA9685 PWM driver (SCL, SDA)
- * - UART for console/debugging
+ * Device tree overlay for DM860E stepper motor driver and PCA9685
+ * KDAA UART 1M Baud with HW Flow Control
  */
+
+/ {
+	/* Use default UART console instead of uart20 */
+	/*
+	chosen {
+		zephyr,console = &uart20;
+		zephyr,shell-uart = &uart20;
+	};
+	*/
+
+	solenoids {
+		compatible = "gpio-leds";
+		solenoid0: solenoid_0 {
+			/* Physical Solenoid on Pin P0.13 (Fallback if not PCA) */
+			gpios = <&gpio0 13 GPIO_ACTIVE_HIGH>;
+			label = "Solenoid 0";
+		};
+	};
+
+	aliases {
+		solenoid = &solenoid0;
+	};
+};
 
 &gpio1 {
     status = "okay";
 };
 
+/* Disable uart20 for now - use default console */
+/*
 &uart20 {
-    status = "okay";
-    current-speed = <115200>;
+	status = "okay";
+	current-speed = <115200>;
+	hw-flow-control;
 };
+*/
 
 &pinctrl {
-    i2c21_default: i2c21_default {
-        group1 {
-            psels = <NRF_PSEL(TWIM_SCL, 1, 7)>,
-                    <NRF_PSEL(TWIM_SDA, 1, 8)>;
-            bias-pull-up;
-        };
-    };
+	i2c21_default: i2c21_default {
+		group1 {
+			psels = <NRF_PSEL(TWIM_SDA, 1, 8)>,
+					<NRF_PSEL(TWIM_SCL, 1, 7)>;
+		};
+	};
 
-    i2c21_sleep: i2c21_sleep {
-        group1 {
-            psels = <NRF_PSEL(TWIM_SCL, 1, 7)>,
-                    <NRF_PSEL(TWIM_SDA, 1, 8)>;
-            low-power-enable;
-        };
-    };
+	i2c21_sleep: i2c21_sleep {
+		group1 {
+			psels = <NRF_PSEL(TWIM_SDA, 1, 8)>,
+					<NRF_PSEL(TWIM_SCL, 1, 7)>;
+			low-power-enable;
+		};
+	};
 };
 
 &i2c21 {
-    status = "okay";
-    clock-frequency = <I2C_BITRATE_STANDARD>;  /* 100kHz - Slower for reliability */
-    pinctrl-0 = <&i2c21_default>;
-    pinctrl-1 = <&i2c21_sleep>;
-    pinctrl-names = "default", "sleep";
-    zephyr,concat-buf-size = <256>;  /* Increase I2C buffer */
-};
-
-/ {
-    chosen {
-        zephyr,console    = &uart20;
-        zephyr,shell-uart = &uart20;
-    };
+	status = "okay";
+	pinctrl-0 = <&i2c21_default>;
+	pinctrl-1 = <&i2c21_sleep>;
+	pinctrl-names = "default", "sleep";
 };

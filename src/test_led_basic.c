@@ -1,29 +1,4 @@
-/*
- * =============================================================================
- * KLAVIATOR - SIMPLE PCA9685 LED TEST
- * =============================================================================
- *
- * This is a basic test to verify PCA9685 communication and LED control.
- * LEDs should blink in sequence through channels 0-15.
- *
- * Hardware Setup:
- *   PCA9685:
- *     P1.07  ->  PCA9685 SCL  (+ 4.7k pullup to 3.3V)
- *     P1.08  ->  PCA9685 SDA  (+ 4.7k pullup to 3.3V)
- *     3.3V   ->  PCA9685 VCC
- *     GND    ->  PCA9685 GND, OE, A0-A5
- *
- *   LEDs (each channel):
- *     PCA9685 CH0-15 -> 330Ω resistor -> LED anode (+)
- *     LED cathode (-) -> GND
- *
- * Test Sequence:
- *   1. All LEDs on for 2 seconds
- *   2. All LEDs off for 1 second
- *   3. Individual LEDs blink in sequence (CH0 to CH15)
- *   4. Repeat
- * =============================================================================
- */
+
 
 #include <stdio.h>
 #include <zephyr/kernel.h>
