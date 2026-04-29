@@ -213,8 +213,8 @@ static struct k_thread sequencer_thread;
  * ============================================================================= */
 
 #if ENABLE_UART_MODE
-#define MSG_SIZE 128
-K_MSGQ_DEFINE(uart_msgq, MSG_SIZE, 256, 4);
+#define MSG_SIZE 32
+K_MSGQ_DEFINE(uart_msgq, MSG_SIZE, 1024, 4);
 static const struct device *const uart_dev =
     DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
 static char rx_buf[MSG_SIZE];
@@ -397,7 +397,7 @@ K_TIMER_DEFINE(control_timer, control_timer_cb, NULL);
 
 static void sequencer_loop(void *a1, void *a2, void *a3) {
     kdaa_event_t ev;
-    printk("[SEQ] Started prio=%d poll=0.5ms\n", SEQUENCER_PRIORITY);
+    printk("[SEQ] Started prio=%d poll=0.05ms (50us)\n", SEQUENCER_PRIORITY);
     while (1) {
         uint32_t now = get_sync_time();
         while (peek_event(&event_buffer, &ev)) {
@@ -416,7 +416,12 @@ static void sequencer_loop(void *a1, void *a2, void *a3) {
                     activate_solenoid((uint8_t)sol_idx,
                                       ev.velocity, ev.duration_ms);
                 }
-                printk("HIT:%d\n", ev.note_number);
+                /* Send HIT for Note On, og REL for Note Off (for Dashboard visualisering) */
+                if (ev.velocity > 0) {
+                    printk("HIT:%d\n", ev.note_number);
+                } else {
+                    printk("REL:%d\n", ev.note_number);
+                }
                 break;
             }
             case EVENT_STOP:
@@ -434,7 +439,7 @@ static void sequencer_loop(void *a1, void *a2, void *a3) {
                 break;
             }
         }
-        k_usleep(500);
+        k_usleep(50);  // 0.05ms = 10x bedre timing-presisjon
     }
 }
 
@@ -444,19 +449,26 @@ static void sequencer_loop(void *a1, void *a2, void *a3) {
 
 #if ENABLE_UART_MODE
 static void uart_cb(const struct device *dev, void *user_data) {
-    uint8_t c;
+    uint8_t buf[64];
+    int len;
     if (!uart_irq_update(uart_dev) || !uart_irq_rx_ready(uart_dev)) return;
-    while (uart_fifo_read(uart_dev, &c, 1) == 1) {
-        if (c == '\n' || c == '\r') {
-            if (rx_pos > 0) {
-                rx_buf[rx_pos] = '\0';
-                k_msgq_put(&uart_msgq, rx_buf, K_NO_WAIT);
+    
+    while ((len = uart_fifo_read(uart_dev, buf, sizeof(buf))) > 0) {
+        for (int i = 0; i < len; i++) {
+            uint8_t c = buf[i];
+            if (c == '\n' || c == '\r') {
+                if (rx_pos > 0) {
+                    rx_buf[rx_pos] = '\0';
+                    if (k_msgq_put(&uart_msgq, rx_buf, K_NO_WAIT) != 0) {
+                        /* Queue full! We just have to drop it to avoid ISR hang. */
+                    }
+                    rx_pos = 0;
+                }
+            } else if (rx_pos < (MSG_SIZE - 1)) {
+                rx_buf[rx_pos++] = c;
+            } else {
                 rx_pos = 0;
             }
-        } else if (rx_pos < (MSG_SIZE - 1)) {
-            rx_buf[rx_pos++] = c;
-        } else {
-            rx_pos = 0;
         }
     }
 }
