@@ -3,21 +3,15 @@
  * KLAVIATOR V4.0 - Stepper Motor + PCA9685 Solenoid Controller
  * =============================================================================
  *
- * SELECT MODE with the TEST_MODE define below:
- *
- *   TEST_MODE 1  ->  DM860E stepper motor test (runs on boot, loops forever)
- *                    Motor moves forward 1000 steps, pauses, reverses, repeats
- *                    PCA9685 / solenoids are NOT used
- *
- *   TEST_MODE 0  ->  PCA9685 solenoid test (runs on boot, full scale sequence)
- *                    Motor is NOT used
+ * MOTOR_TEST_MODE 1  ->  Shuttle test: motor beveger seg automatisk frem/tilbake
+ * MOTOR_TEST_MODE 0  ->  KDAA modus: motor og solenoider styres fra dashboard
  *
  * Hardware connections:
  *
- *   MOTOR (DM860E):
+ *   MOTOR (DM860E via lineaer aktuator):
  *     P1.09  ->  DM860E PUL+  (step pulses)
  *     P1.10  ->  DM860E DIR+  (direction)
- *     P1.11  ->  DM860E ENA+  (enable, active HIGH here)
+ *     P1.11  ->  DM860E ENA+  (enable, active HIGH)
  *     GND    ->  DM860E PUL-, DIR-, ENA-, GND
  *
  *   SOLENOIDS (PCA9685 via i2c21):
@@ -29,7 +23,7 @@
  *     IRLZ44N drain   ->  solenoid-  ->  12V
  *     1N4007 across each solenoid (cathode to 12V)
  *
- *   UART (optional, for dashboard when ENABLE_UART_MODE=1):
+ *   UART (for dashboard):
  *     P1.13  ->  USB-UART TX
  *     P1.14  ->  USB-UART RX
  * =============================================================================
@@ -46,12 +40,11 @@
 #include <strings.h>
 
 /* =============================================================================
- * >>>  SET THIS TO CHOOSE WHAT RUNS ON BOOT  <<<
- *
- *   1 = DM860E stepper motor test
- *   0 = PCA9685 solenoid test
+ * MOTOR TEST MODE
+ * 1 = Shuttle test (automatisk frem/tilbake)
+ * 0 = KDAA modus (dashboard-styrt)
  * ============================================================================= */
-#define TEST_MODE           0
+#define MOTOR_TEST_MODE     0
 
 /* =============================================================================
  * GENERAL CONFIGURATION
@@ -63,73 +56,88 @@
 static void queue_strike(uint16_t seq, uint32_t t, uint8_t sol, uint8_t vel, uint16_t dur);
 
 /* =============================================================================
- * MOTOR CONFIGURATION  (used when TEST_MODE=1)
+ * MOTOR CONFIGURATION
  * ============================================================================= */
 
-#define GPIO_DEV_NODE       DT_NODELABEL(gpio1)
-#define PIN_STEP            9       /* P1.09  ->  DM860E PUL+ */
-#define PIN_DIR             10      /* P1.10  ->  DM860E DIR+ */
-#define PIN_ENA             11      /* P1.11  ->  DM860E ENA+ */
+#define GPIO_DEV_NODE           DT_NODELABEL(gpio1)
+#define PIN_STEP                9
+#define PIN_DIR                 10
+#define PIN_ENA                 11
 
-#define MOTOR_STEPS_PER_MOVE    1000    /* steps per direction */
-#define MOTOR_STEP_DELAY_US     500     /* 500us per half-step = ~1000 steps/sec */
-#define MOTOR_PAUSE_MS          1000    /* pause between directions */
+#define SHUTTLE_POS_A           0
+#define SHUTTLE_POS_B           300
+#define SHUTTLE_PAUSE_MS        500
 
-#define DIR_FORWARD         1
-#define DIR_REVERSE         0
+#define STEPS_PER_MM            40
+#define RAIL_MIN_MM             0
+#define RAIL_MAX_MM             590
+
+#define MOTOR_SPEED_NORMAL_US   500
+#define MOTOR_SPEED_SLOW_US     1500
+#define MOTOR_SPEED_HOMING_US   2000
+#define MOTOR_ACCEL_STEPS       200
+#define HOMING_MAX_STEPS        2000
+
+#define DIR_FORWARD             1
+#define DIR_REVERSE             0
 
 static const struct device *gpio_dev = DEVICE_DT_GET(GPIO_DEV_NODE);
 
 /* =============================================================================
- * SOLENOID CONFIGURATION  (used when TEST_MODE=0)
+ * SOLENOID CONFIGURATION
  * ============================================================================= */
 
 #define TOTAL_SOLENOIDS     16
 #define BASE_MIDI_NOTE      36   /* C2 - startposisjon for solenoid 0 (CH0) */
 
-/* Mapping: MIDI-note → solenoid-indeks
+/* Mapping: MIDI-note -> solenoid-indeks
  * Hvite tangenter (CH0-7):  C2(36)=0, D2(38)=1, E2(40)=2, F2(41)=3,
  *                           G2(43)=4, A2(45)=5, B2(47)=6, C3(48)=7
  * Svarte tangenter (CH8-15): C#2(37)=8, D#2(39)=9, F#2(42)=10, G#2(44)=11,
- *                            A#2(46)=12, C#3(49)=13, D#3(51)=14, F#3(54)=15
- * Merk: svarte tangenter over oktavgrensen bruker neste oktav */
+ *                            A#2(46)=12, C#3(49)=13, D#3(51)=14, F#3(54)=15 */
 static const int8_t midi_to_sol[20] = {
-     0,  /* 36 C2  → sol 0  (hvit) */
-     8,  /* 37 C#2 → sol 8  (svart) */
-     1,  /* 38 D2  → sol 1  (hvit) */
-     9,  /* 39 D#2 → sol 9  (svart) */
-     2,  /* 40 E2  → sol 2  (hvit) */
-     3,  /* 41 F2  → sol 3  (hvit) */
-    10,  /* 42 F#2 → sol 10 (svart) */
-     4,  /* 43 G2  → sol 4  (hvit) */
-    11,  /* 44 G#2 → sol 11 (svart) */
-     5,  /* 45 A2  → sol 5  (hvit) */
-    12,  /* 46 A#2 → sol 12 (svart) */
-     6,  /* 47 B2  → sol 6  (hvit) */
-     7,  /* 48 C3  → sol 7  (hvit) */
-    13,  /* 49 C#3 → sol 13 (svart) */
-     -1, /* 50 D3  → ingen (utenfor vindu) */
-    14,  /* 51 D#3 → sol 14 (svart) */
-     -1, /* 52 E3  → ingen */
-     -1, /* 53 F3  → ingen */
-    15,  /* 54 F#3 → sol 15 (svart) */
-     -1, /* 55 G3  → ingen */
+     0,  /* 36 C2  -> sol 0  (hvit) */
+     8,  /* 37 C#2 -> sol 8  (svart) */
+     1,  /* 38 D2  -> sol 1  (hvit) */
+     9,  /* 39 D#2 -> sol 9  (svart) */
+     2,  /* 40 E2  -> sol 2  (hvit) */
+     3,  /* 41 F2  -> sol 3  (hvit) */
+    10,  /* 42 F#2 -> sol 10 (svart) */
+     4,  /* 43 G2  -> sol 4  (hvit) */
+    11,  /* 44 G#2 -> sol 11 (svart) */
+     5,  /* 45 A2  -> sol 5  (hvit) */
+    12,  /* 46 A#2 -> sol 12 (svart) */
+     6,  /* 47 B2  -> sol 6  (hvit) */
+     7,  /* 48 C3  -> sol 7  (hvit) */
+    13,  /* 49 C#3 -> sol 13 (svart) */
+    -1,  /* 50 D3  -> ingen */
+    14,  /* 51 D#3 -> sol 14 (svart) */
+    -1,  /* 52 E3  -> ingen */
+    -1,  /* 53 F3  -> ingen */
+    15,  /* 54 F#3 -> sol 15 (svart) */
+    -1,  /* 55 G3  -> ingen */
 };
+
 static inline int8_t note_to_solenoid(uint8_t note) {
     if (note < BASE_MIDI_NOTE || note > 55) return -1;
     return midi_to_sol[note - BASE_MIDI_NOTE];
 }
-#define KICK_DURATION_MIN_MS  8    /* kick-tid ved velocity=1   */
-#define KICK_DURATION_MAX_MS  28   /* kick-tid ved velocity=127 */
-/* Lineær interpolasjon: kick_ms = MIN + (vel * (MAX-MIN)) / 127 */
+
+#define KICK_DURATION_MIN_MS  8
+#define KICK_DURATION_MAX_MS  28
+
 static inline uint32_t kick_duration_for_vel(uint8_t vel) {
     return KICK_DURATION_MIN_MS +
            ((uint32_t)vel * (KICK_DURATION_MAX_MS - KICK_DURATION_MIN_MS)) / 127U;
 }
+
 #define MIN_PWM_PERCENT     18
 #define TIMER_PERIOD_MS     2
 
-/* i2c21: separate instance from UART20, free to use */
+/* =============================================================================
+ * PCA9685 CONFIGURATION
+ * ============================================================================= */
+
 #define I2C_DEV_NODE            DT_NODELABEL(i2c21)
 #define PCA9685_I2C_ADDR        0x40
 #define PCA9685_MODE1           0x00
@@ -144,7 +152,7 @@ static inline uint32_t kick_duration_for_vel(uint8_t vel) {
 #define PCA9685_MODE1_AI        0x20
 #define PCA9685_MODE1_ALLCALL   0x01
 #define PCA9685_MAX_PWM         4095
-#define PCA9685_PRESCALE_VALUE  0x1D    /* ~203 Hz */
+#define PCA9685_PRESCALE_VALUE  0x1D
 
 static const struct device *i2c_device = DEVICE_DT_GET(I2C_DEV_NODE);
 
@@ -157,7 +165,7 @@ static inline uint32_t get_sync_time(void) { return k_uptime_get_32() - system_t
 void sync_clock(void) { system_time_offset = k_uptime_get_32(); printk("[SYNC] T=0\n"); }
 
 /* =============================================================================
- * EVENT SYSTEM  (solenoid sequencer)
+ * EVENT SYSTEM
  * ============================================================================= */
 
 typedef enum { EVENT_SYNC, EVENT_STOP, EVENT_MOVE, EVENT_STRIKE } event_type_t;
@@ -234,14 +242,14 @@ struct Solenoid {
     uint8_t  channel;
     bool     in_kick_phase;
     uint32_t kick_start_time;
-    uint32_t kick_duration_ms;   /* velocity-avhengig kick-tid */
+    uint32_t kick_duration_ms;
     uint32_t duration_target_ms;
     uint32_t activation_time;
 };
 static struct Solenoid solenoids[TOTAL_SOLENOIDS];
 
 /* =============================================================================
- * SEQUENCER THREAD
+ * THREAD DEFINITIONS
  * ============================================================================= */
 
 #define SEQUENCER_STACK_SIZE 4096
@@ -249,12 +257,32 @@ static struct Solenoid solenoids[TOTAL_SOLENOIDS];
 K_THREAD_STACK_DEFINE(sequencer_stack, SEQUENCER_STACK_SIZE);
 static struct k_thread sequencer_thread;
 
+#define MOTOR_STACK_SIZE    4096
+#define MOTOR_PRIORITY      K_PRIO_COOP(2)
+K_THREAD_STACK_DEFINE(motor_stack, MOTOR_STACK_SIZE);
+static struct k_thread motor_thread;
+
+static struct {
+    int32_t  position_steps;
+    int32_t  position_mm;
+    bool     is_homed;
+    bool     is_moving;
+    bool     shuttle_running;
+} motor_state = { 0, 0, false, false, false };
+
+typedef struct {
+    int32_t  target_mm;
+    uint32_t speed_us;
+} motor_cmd_t;
+
+K_MSGQ_DEFINE(motor_msgq, sizeof(motor_cmd_t), 8, 4);
+
 /* =============================================================================
  * UART
  * ============================================================================= */
 
 #if ENABLE_UART_MODE
-#define MSG_SIZE 32
+#define MSG_SIZE 128
 K_MSGQ_DEFINE(uart_msgq, MSG_SIZE, 1024, 4);
 static const struct device *const uart_dev =
     DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
@@ -268,9 +296,7 @@ static int  rx_pos = 0;
 
 static int pca9685_write_reg(uint8_t reg, uint8_t val) {
     uint8_t buf[2] = { reg, val };
-    int ret = i2c_write(i2c_device, buf, 2, PCA9685_I2C_ADDR);
-    /* if (ret) printk("[ERROR] PCA9685 reg=0x%02X val=0x%02X err=%d\n", reg, val, ret); */
-    return ret;
+    return i2c_write(i2c_device, buf, 2, PCA9685_I2C_ADDR);
 }
 
 static int pca9685_set_channel(uint8_t ch, uint16_t v) {
@@ -282,9 +308,7 @@ static int pca9685_set_channel(uint8_t ch, uint16_t v) {
     else if (v >= PCA9685_MAX_PWM) { buf[1]=0x00; buf[2]=0x10; buf[3]=0x00; buf[4]=0x00; }
     else                           { buf[1]=0x00; buf[2]=0x00;
                                      buf[3]=(uint8_t)(v & 0xFF); buf[4]=(uint8_t)(v >> 8); }
-    int ret = i2c_write(i2c_device, buf, 5, PCA9685_I2C_ADDR);
-    /* if (ret) printk("[ERROR] PCA9685 ch=%d val=%u err=%d\n", ch, v, ret); */
-    return ret;
+    return i2c_write(i2c_device, buf, 5, PCA9685_I2C_ADDR);
 }
 
 static int pca9685_all_off(void) {
@@ -336,13 +360,13 @@ static int init_pca9685(void) {
         printk("[ERROR] i2c21 not ready. Check P1.07=SCL P1.08=SDA VCC=3.3V\n");
         return -ENODEV;
     }
-    if (pca9685_write_reg(PCA9685_MODE1, PCA9685_MODE1_SLEEP))                   return -EIO;
+    if (pca9685_write_reg(PCA9685_MODE1, PCA9685_MODE1_SLEEP))                      return -EIO;
     k_usleep(500);
-    if (pca9685_write_reg(PCA9685_PRESCALE, PCA9685_PRESCALE_VALUE))             return -EIO;
+    if (pca9685_write_reg(PCA9685_PRESCALE, PCA9685_PRESCALE_VALUE))                return -EIO;
     if (pca9685_write_reg(PCA9685_MODE1, PCA9685_MODE1_AI | PCA9685_MODE1_ALLCALL)) return -EIO;
     k_usleep(500);
-    if (pca9685_write_reg(PCA9685_MODE2, 0x04))                                  return -EIO;
-    if (pca9685_all_off())                                                        return -EIO;
+    if (pca9685_write_reg(PCA9685_MODE2, 0x04))                                     return -EIO;
+    if (pca9685_all_off())                                                           return -EIO;
     printk("[INIT] PCA9685 ready\n");
     return 0;
 }
@@ -378,8 +402,7 @@ void activate_solenoid(uint8_t sol, uint8_t velocity, uint32_t duration_ms) {
         printk("[SAFE] RELEASE sol=%2d T=%u\n", sol, get_sync_time());
 #else
         pca9685_set_channel(s->channel, 0);
-        printk("[RELEASE] sol=%2d ch=%2d T=%u\n",
-               sol, s->channel, get_sync_time());
+        printk("[RELEASE] sol=%2d ch=%2d T=%u\n", sol, s->channel, get_sync_time());
 #endif
     }
 }
@@ -401,9 +424,9 @@ void deactivate_all_solenoids(void) {
 
 /* =============================================================================
  * CONTROL TIMER  (kick->hold + auto-release)
+ * k_work brukes fordi I2C IKKE kan kalles fra ISR-kontekst
  * ============================================================================= */
 
-/* Work item for solenoid control — I2C must NOT be called from ISR context */
 static struct k_work solenoid_work;
 
 static void solenoid_work_handler(struct k_work *work) {
@@ -434,12 +457,128 @@ static void solenoid_work_handler(struct k_work *work) {
     }
 }
 
-/* Timer callback — kun submit work, ingen I2C her */
 static void control_timer_cb(struct k_timer *timer) {
     k_work_submit(&solenoid_work);
 }
 
 K_TIMER_DEFINE(control_timer, control_timer_cb, NULL);
+
+/* =============================================================================
+ * MOTOR DRIVER  (DM860E stepper via linear aktuator)
+ * ============================================================================= */
+
+static void motor_set_dir(int dir) {
+    gpio_pin_set(gpio_dev, PIN_DIR, dir);
+    k_usleep(5);
+}
+
+static void motor_step_pulse(uint32_t delay_us) {
+    gpio_pin_set(gpio_dev, PIN_STEP, 1);
+    k_usleep(delay_us);
+    gpio_pin_set(gpio_dev, PIN_STEP, 0);
+    k_usleep(delay_us);
+}
+
+static void motor_run_steps(int dir, uint32_t steps, uint32_t speed_us) {
+    if (steps == 0) return;
+    motor_set_dir(dir);
+    motor_state.is_moving = true;
+    for (uint32_t i = 0; i < steps; i++) {
+        uint32_t us = speed_us;
+        if (steps > (uint32_t)(MOTOR_ACCEL_STEPS * 2)) {
+            if (i < MOTOR_ACCEL_STEPS) {
+                uint32_t f = MOTOR_ACCEL_STEPS - i;
+                us = speed_us + (f * speed_us * 2) / MOTOR_ACCEL_STEPS;
+            } else if (i > steps - MOTOR_ACCEL_STEPS) {
+                uint32_t f = i - (steps - MOTOR_ACCEL_STEPS);
+                us = speed_us + (f * speed_us * 2) / MOTOR_ACCEL_STEPS;
+            }
+        }
+        motor_step_pulse(us);
+        if (dir == DIR_FORWARD) motor_state.position_steps++;
+        else                    motor_state.position_steps--;
+    }
+    motor_state.position_mm = motor_state.position_steps / STEPS_PER_MM;
+    motor_state.is_moving = false;
+}
+
+static void motor_home(void) {
+    printk("[MOTOR] Homing...\n");
+    gpio_pin_set(gpio_dev, PIN_ENA, 1);
+    k_msleep(50);
+    motor_set_dir(DIR_REVERSE);
+    for (uint32_t i = 0; i < HOMING_MAX_STEPS; i++) {
+        motor_step_pulse(MOTOR_SPEED_HOMING_US);
+    }
+    k_msleep(200);
+    motor_run_steps(DIR_FORWARD, 5 * STEPS_PER_MM, MOTOR_SPEED_HOMING_US);
+    motor_state.position_steps = 0;
+    motor_state.position_mm = 0;
+    motor_state.is_homed = true;
+    printk("[MOTOR] Homed. Posisjon = 0mm\n");
+}
+
+static void motor_goto_mm(int32_t target_mm, uint32_t speed_us) {
+    if (target_mm < RAIL_MIN_MM) target_mm = RAIL_MIN_MM;
+    if (target_mm > RAIL_MAX_MM) target_mm = RAIL_MAX_MM;
+    int32_t  target_steps = (int32_t)(target_mm * STEPS_PER_MM);
+    int32_t  delta        = target_steps - motor_state.position_steps;
+    if (delta == 0) return;
+    int      dir   = (delta > 0) ? DIR_FORWARD : DIR_REVERSE;
+    uint32_t steps = (uint32_t)abs(delta);
+    printk("[MOTOR] %dmm -> %dmm (%d steg)\n",
+           motor_state.position_mm, target_mm, steps);
+    motor_run_steps(dir, steps, speed_us);
+    printk("[MOTOR] Ankom %dmm\n", motor_state.position_mm);
+}
+
+static void motor_queue_move(int32_t target_mm, uint32_t speed_us) {
+    motor_cmd_t cmd = { .target_mm = target_mm, .speed_us = speed_us };
+    if (k_msgq_put(&motor_msgq, &cmd, K_NO_WAIT) != 0) {
+        printk("[WARN] Motor ko full\n");
+    }
+}
+
+static void motor_thread_fn(void *a1, void *a2, void *a3) {
+    printk("[MOTOR] Trad startet\n");
+    if (!device_is_ready(gpio_dev)) {
+        printk("[ERROR] Motor GPIO ikke klar\n");
+        return;
+    }
+    gpio_pin_configure(gpio_dev, PIN_STEP, GPIO_OUTPUT_INACTIVE);
+    gpio_pin_configure(gpio_dev, PIN_DIR,  GPIO_OUTPUT_INACTIVE);
+    gpio_pin_configure(gpio_dev, PIN_ENA,  GPIO_OUTPUT_INACTIVE);
+
+    motor_home();
+
+#if MOTOR_TEST_MODE
+    motor_state.shuttle_running = true;
+    bool at_a = true;
+    uint32_t pass = 0;
+    printk("[MOTOR] Shuttle-modus: %dmm <-> %dmm\n", SHUTTLE_POS_A, SHUTTLE_POS_B);
+    while (1) {
+        if (at_a) {
+            printk("[MOTOR] Pass %u -> %dmm\n", pass, SHUTTLE_POS_B);
+            motor_goto_mm(SHUTTLE_POS_B, MOTOR_SPEED_NORMAL_US);
+            at_a = false;
+        } else {
+            printk("[MOTOR] Pass %u -> %dmm\n", pass, SHUTTLE_POS_A);
+            motor_goto_mm(SHUTTLE_POS_A, MOTOR_SPEED_NORMAL_US);
+            at_a = true;
+            pass++;
+        }
+        k_msleep(SHUTTLE_PAUSE_MS);
+    }
+#else
+    motor_cmd_t cmd;
+    while (1) {
+        if (k_msgq_get(&motor_msgq, &cmd, K_FOREVER) == 0) {
+            printk("[MOTOR] CMD -> %dmm\n", cmd.target_mm);
+            motor_goto_mm(cmd.target_mm, cmd.speed_us);
+        }
+    }
+#endif
+}
 
 /* =============================================================================
  * SEQUENCER THREAD
@@ -453,14 +592,13 @@ static void sequencer_loop(void *a1, void *a2, void *a3) {
             if (now < ev.target_time_ms) break;
             pop_event(&event_buffer, &ev);
             switch (ev.type) {
-
             case EVENT_MOVE:
+                motor_queue_move((int32_t)ev.note_number, MOTOR_SPEED_NORMAL_US);
                 break;
             case EVENT_STRIKE: {
                 int8_t sol_idx = note_to_solenoid(ev.note_number);
                 if (sol_idx >= 0) {
-                    activate_solenoid((uint8_t)sol_idx,
-                                      ev.velocity, ev.duration_ms);
+                    activate_solenoid((uint8_t)sol_idx, ev.velocity, ev.duration_ms);
                 }
                 if (ev.velocity > 0) {
                     printk("HIT:%d\n", ev.note_number);
@@ -474,7 +612,6 @@ static void sequencer_loop(void *a1, void *a2, void *a3) {
             case EVENT_SYNC:
                 sync_clock();
                 break;
-
             default:
                 break;
             }
@@ -484,7 +621,7 @@ static void sequencer_loop(void *a1, void *a2, void *a3) {
 }
 
 /* =============================================================================
- * UART  (compiled out when ENABLE_UART_MODE=0)
+ * UART
  * ============================================================================= */
 
 #if ENABLE_UART_MODE
@@ -492,16 +629,13 @@ static void uart_cb(const struct device *dev, void *user_data) {
     uint8_t buf[64];
     int len;
     if (!uart_irq_update(uart_dev) || !uart_irq_rx_ready(uart_dev)) return;
-    
     while ((len = uart_fifo_read(uart_dev, buf, sizeof(buf))) > 0) {
         for (int i = 0; i < len; i++) {
             uint8_t c = buf[i];
             if (c == '\n' || c == '\r') {
                 if (rx_pos > 0) {
                     rx_buf[rx_pos] = '\0';
-                    if (k_msgq_put(&uart_msgq, rx_buf, K_NO_WAIT) != 0) {
-                        /* Queue full! We just have to drop it to avoid ISR hang. */
-                    }
+                    k_msgq_put(&uart_msgq, rx_buf, K_NO_WAIT);
                     rx_pos = 0;
                 }
             } else if (rx_pos < (MSG_SIZE - 1)) {
@@ -531,7 +665,6 @@ static void parse_kdaa(char *msg) {
         return;
     }
 
-    /* M:H:P:T - MOVE command */
     if (msg[0] == 'M' && msg[1] == ':') {
         int p; uint32_t t;
         if (sscanf(msg, "M:%c:%d:%u", &hand, &p, &t) == 3) {
@@ -539,7 +672,7 @@ static void parse_kdaa(char *msg) {
                 .type = EVENT_MOVE,
                 .target_time_ms = t,
                 .hand = hand,
-                .note_number = p,
+                .note_number = (uint8_t)p,
                 .sequence_number = 0
             };
             add_event(&event_buffer, &ev);
@@ -547,7 +680,6 @@ static void parse_kdaa(char *msg) {
         }
     }
 
-    /* S:H:N:V:T:D - STRIKE command */
     if (msg[0] == 'S' && msg[1] == ':') {
         if (sscanf(msg, "S:%c:%d:%d:%d:%d", &hand, &note, &vel, &t_ms, &dur) == 5) {
             if (note >= 0 && note <= 127 && vel >= 0 && vel <= 127) {
@@ -565,7 +697,6 @@ static void parse_kdaa(char *msg) {
             }
             return;
         }
-        /* Fallback to S:H:N:V:T */
         if (sscanf(msg, "S:%c:%d:%d:%d", &hand, &note, &vel, &t_ms) == 4) {
             if (note >= 0 && note <= 127 && vel >= 0 && vel <= 127) {
                 kdaa_event_t ev = {
@@ -584,7 +715,6 @@ static void parse_kdaa(char *msg) {
         }
     }
 
-    /* Legacy formats for colleague's testing */
     int hand_int;
     if (sscanf(msg, "%d:%d:%d:%d:%d:%d", &seq, &hand_int, &note, &vel, &t_ms, &dur) == 6) {
         hand = (char)hand_int;
@@ -596,13 +726,9 @@ static void parse_kdaa(char *msg) {
 
     if (sscanf(msg, "%d:%d", &note, &vel) == 2) {
         if (note >= 0 && note <= 127 && vel >= 0 && vel <= 127) {
-            int sol_idx = note - BASE_MIDI_NOTE;
-            if (sol_idx >= 0 && sol_idx < TOTAL_SOLENOIDS) {
-                activate_solenoid((uint8_t)sol_idx, (uint8_t)vel, 0);
-            }
-            /* Direct hit not queued, but we could print it. Legacy format anyway. */
-        }
-        else printk("[ERR] Invalid note/velocity\n");
+            int8_t sol_idx = note_to_solenoid((uint8_t)note);
+            if (sol_idx >= 0) activate_solenoid((uint8_t)sol_idx, (uint8_t)vel, 0);
+        } else printk("[ERR] Invalid note/velocity\n");
         return;
     }
     printk("[ERR] Use S:H:N:V:T:D or M:H:P:T or NOTE:VEL\n");
@@ -610,95 +736,10 @@ static void parse_kdaa(char *msg) {
 #endif
 
 /* =============================================================================
- * MOTOR TEST  (TEST_MODE=1)
- *
- * Sends step pulses to DM860E.
- * Adjust MOTOR_STEP_DELAY_US to change speed:
- *   500us  = ~1000 steps/sec  (medium)
- *   200us  = ~2500 steps/sec  (fast)
- *   1000us = ~500  steps/sec  (slow)
- *
- * Adjust MOTOR_STEPS_PER_MOVE to change distance.
- * At DM860E default 200 steps/rev: 1000 steps = 5 full rotations.
+ * QUEUE STRIKE HELPER
  * ============================================================================= */
 
-#if TEST_MODE
-
-static int init_motor(void) {
-    printk("[MOTOR] Initialising DM860E on gpio1\n");
-    printk("[MOTOR] P1.09=STEP  P1.10=DIR  P1.11=ENA\n");
-
-    if (!device_is_ready(gpio_dev)) {
-        printk("[ERROR] gpio1 not ready\n");
-        return -ENODEV;
-    }
-
-    gpio_pin_configure(gpio_dev, PIN_STEP, GPIO_OUTPUT_INACTIVE);
-    gpio_pin_configure(gpio_dev, PIN_DIR,  GPIO_OUTPUT_INACTIVE);
-    gpio_pin_configure(gpio_dev, PIN_ENA,  GPIO_OUTPUT_INACTIVE);
-
-    /* Enable motor driver */
-    gpio_pin_set(gpio_dev, PIN_ENA, 1);
-    k_msleep(100); /* DM860E needs time to enable */
-
-    printk("[MOTOR] DM860E enabled\n");
-    return 0;
-}
-
-static void step_motor(uint32_t steps, int direction, uint32_t delay_us)
-{
-    gpio_pin_set(gpio_dev, PIN_DIR, direction);
-    k_usleep(10); /* direction settle time */
-
-    for (uint32_t i = 0; i < steps; i++) {
-        gpio_pin_set(gpio_dev, PIN_STEP, 1);
-        k_usleep(delay_us);
-        gpio_pin_set(gpio_dev, PIN_STEP, 0);
-        k_usleep(delay_us);
-    }
-}
-
-static void run_motor_test(void) {
-    printk("\n");
-    printk("╔══════════════════════════════════════════════════════╗\n");
-    printk("║  DM860E MOTOR TEST  -  FORWARD / REVERSE LOOP       ║\n");
-    printk("╚══════════════════════════════════════════════════════╝\n");
-    printk("[MOTOR] Steps per move : %d\n",   MOTOR_STEPS_PER_MOVE);
-    printk("[MOTOR] Step delay     : %d us\n", MOTOR_STEP_DELAY_US);
-    printk("[MOTOR] Speed          : ~%d steps/sec\n",
-           1000000 / (MOTOR_STEP_DELAY_US * 2));
-    printk("[MOTOR] Pause between  : %d ms\n\n", MOTOR_PAUSE_MS);
-
-    uint32_t pass = 0;
-    while (1) {
-        printk("[MOTOR] Pass %u  FORWARD  %d steps...\n",
-               pass, MOTOR_STEPS_PER_MOVE);
-        step_motor(MOTOR_STEPS_PER_MOVE, DIR_FORWARD, MOTOR_STEP_DELAY_US);
-
-        printk("[MOTOR] Pause %dms\n", MOTOR_PAUSE_MS);
-        k_msleep(MOTOR_PAUSE_MS);
-
-        printk("[MOTOR] Pass %u  REVERSE  %d steps...\n",
-               pass, MOTOR_STEPS_PER_MOVE);
-        step_motor(MOTOR_STEPS_PER_MOVE, DIR_REVERSE, MOTOR_STEP_DELAY_US);
-
-        printk("[MOTOR] Pause %dms\n\n", MOTOR_PAUSE_MS);
-        k_msleep(MOTOR_PAUSE_MS);
-
-        pass++;
-    }
-}
-
-#endif /* TEST_MODE */
-
-/* =============================================================================
- * SOLENOID TEST SEQUENCE  (TEST_MODE=0)
- * ============================================================================= */
-
-#if !TEST_MODE
-
-static void queue_strike(uint16_t seq, uint32_t t,
-                         uint8_t note, uint8_t vel, uint16_t dur) {
+static void queue_strike(uint16_t seq, uint32_t t, uint8_t note, uint8_t vel, uint16_t dur) {
     kdaa_event_t ev = {
         .type            = EVENT_STRIKE,
         .target_time_ms  = t,
@@ -712,48 +753,6 @@ static void queue_strike(uint16_t seq, uint32_t t,
         printk("[ERR] Buffer full seq=%u\n", seq);
 }
 
-static void run_solenoid_test(void) {
-    printk("\n");
-    printk("╔══════════════════════════════════════════════════════╗\n");
-    printk("║  SOLENOID TEST  -  AUTONOMOUS BOOT PLAY             ║\n");
-    printk("╚══════════════════════════════════════════════════════╝\n");
-    printk("[TEST] Phase 1  T=0.5-2.0s  : vel sweep sol0 (30/64/127)\n");
-    printk("[TEST] Phase 2  T=3.0s      : 500ms hold, watch KICK->HOLD\n");
-    printk("[TEST] Phase 3  T=4.0s      : rapid fire x4\n");
-    printk("[TEST] Phase 4  T=5.5s      : all 16 ascending\n");
-    printk("[TEST] Phase 5  T=9.0s      : second pass softer\n");
-    printk("[TEST] Phase 6  T=12.5s     : STOP\n\n");
-
-    uint16_t seq = 1;
-
-    queue_strike(seq++,  500, BASE_MIDI_NOTE + 0,  30,  80);
-    queue_strike(seq++, 1200, BASE_MIDI_NOTE + 0,  64,  80);
-    queue_strike(seq++, 2000, BASE_MIDI_NOTE + 0, 127,  80);
-    queue_strike(seq++, 3000, BASE_MIDI_NOTE + 0,  90, 500);
-    queue_strike(seq++, 4000, BASE_MIDI_NOTE + 0, 100,  60);
-    queue_strike(seq++, 4080, BASE_MIDI_NOTE + 0, 100,  60);
-    queue_strike(seq++, 4160, BASE_MIDI_NOTE + 0, 100,  60);
-    queue_strike(seq++, 4240, BASE_MIDI_NOTE + 0, 100,  60);
-
-    for (int i = 0; i < TOTAL_SOLENOIDS; i++)
-        queue_strike(seq++, (uint32_t)(5500 + i * 200), (uint8_t)(BASE_MIDI_NOTE + i), 90, 120);
-
-    for (int i = 0; i < TOTAL_SOLENOIDS; i++)
-        queue_strike(seq++, (uint32_t)(9000 + i * 200), (uint8_t)(BASE_MIDI_NOTE + i), 70, 100);
-
-    kdaa_event_t stop = {
-        .type           = EVENT_STOP,
-        .target_time_ms = 12500,
-        .sequence_number = seq++,
-        .hand           = 0,
-    };
-    add_event(&event_buffer, &stop);
-
-    printk("[TEST] %u events queued. Starts in ~500ms.\n\n", seq - 1);
-}
-
-#endif /* !TEST_MODE */
-
 /* =============================================================================
  * MAIN
  * ============================================================================= */
@@ -763,33 +762,14 @@ int main(void)
     printk("\n");
     printk("╔══════════════════════════════════════════════════════╗\n");
     printk("║  KLAVIATOR V4.0                                     ║\n");
-
-#if TEST_MODE
-    printk("║  MODE: DM860E MOTOR TEST                            ║\n");
+#if MOTOR_TEST_MODE
+    printk("║  MODE: MOTOR SHUTTLE TEST                           ║\n");
 #else
-    printk("║  MODE: KLAVIATOR MIDI SEQUENCER                     ║\n");
+    printk("║  MODE: KLAVIATOR MIDI SEQUENCER + MOTOR             ║\n");
 #endif
-
     printk("╚══════════════════════════════════════════════════════╝\n\n");
 
     k_msleep(100);
-
-    /* ------------------------------------------------------------------ */
-#if TEST_MODE
-    /* ---- MOTOR TEST PATH ---- */
-
-    if (init_motor() < 0) {
-        printk("[ERROR] Motor init failed - check wiring\n");
-        printk("[ERROR] P1.09=STEP P1.10=DIR P1.11=ENA GND=GND\n");
-        while (1) { k_msleep(1000); }
-    }
-
-    printk("[READY] Motor ready. Starting test loop.\n\n");
-    run_motor_test(); /* loops forever */
-
-    /* ------------------------------------------------------------------ */
-#else
-    /* ---- SOLENOID TEST PATH ---- */
 
     if (init_pca9685() < 0)
         printk("[WARN] PCA9685 failed - check wiring\n");
@@ -797,8 +777,7 @@ int main(void)
     init_solenoid_data();
     sync_clock();
 
-    k_timer_start(&control_timer,
-                  K_MSEC(TIMER_PERIOD_MS), K_MSEC(TIMER_PERIOD_MS));
+    k_timer_start(&control_timer, K_MSEC(TIMER_PERIOD_MS), K_MSEC(TIMER_PERIOD_MS));
     printk("[INIT] Control timer %dms kick=%d-%dms (vel-adaptive) min_hold=%d%%\n",
            TIMER_PERIOD_MS, KICK_DURATION_MIN_MS, KICK_DURATION_MAX_MS, MIN_PWM_PERCENT);
 
@@ -811,17 +790,22 @@ int main(void)
                     sequencer_loop, NULL, NULL, NULL,
                     SEQUENCER_PRIORITY, 0, K_NO_WAIT);
     k_thread_name_set(&sequencer_thread, "sequencer");
-    printk("[INIT] Sequencer started\n");
+    printk("[INIT] Sequencer startet\n");
+
+    k_thread_create(&motor_thread, motor_stack,
+                    K_THREAD_STACK_SIZEOF(motor_stack),
+                    motor_thread_fn, NULL, NULL, NULL,
+                    MOTOR_PRIORITY, 0, K_NO_WAIT);
+    k_thread_name_set(&motor_thread, "motor");
+    printk("[INIT] Motor-trad startet\n");
 
 #if SAFE_TEST_MODE
     printk("[WARN] SAFE_TEST_MODE=1 - no hardware output\n");
 #endif
     printk("[READY] System ready\n\n");
 
-    /* run_solenoid_test(); - Removed to prevent interference with MIDI playback */
-
 #if ENABLE_UART_MODE
-    printk("UART KDAA V4.0. Full: S:H:N:V:T:D  Simple: NOTE:VEL\n\n");
+    printk("UART KDAA V4.0. Full: S:H:N:V:T:D  Move: M:H:P:T\n\n");
     if (!device_is_ready(uart_dev)) {
         printk("[WARN] UART not ready\n");
         uint32_t n = 0;
@@ -835,15 +819,16 @@ int main(void)
         if (k_msgq_get(&uart_msgq, msg, K_MSEC(1000)) == 0)
             parse_kdaa(msg);
         else
-            printk("[HB] waiting (%u)\n", hb++);
+            printk("[HB] waiting (%u) motor=%dmm\n", hb++, motor_state.position_mm);
     }
 #else
     printk("[INFO] Standalone. Set ENABLE_UART_MODE=1 for dashboard.\n\n");
     uint32_t n = 0;
-    while (1) { printk("[HB] alive %u\n", n++); k_msleep(1000); }
+    while (1) {
+        printk("[HB] alive %u motor=%dmm\n", n++, motor_state.position_mm);
+        k_msleep(1000);
+    }
 #endif
-
-#endif /* TEST_MODE / solenoid */
 
     return 0;
 }
