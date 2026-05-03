@@ -84,28 +84,39 @@ static const struct device *gpio_dev = DEVICE_DT_GET(GPIO_DEV_NODE);
  * SOLENOID CONFIGURATION  (used when TEST_MODE=0)
  * ============================================================================= */
 
-#define TOTAL_SOLENOIDS     8
+#define TOTAL_SOLENOIDS     16
 #define BASE_MIDI_NOTE      36   /* C2 - startposisjon for solenoid 0 (CH0) */
 
-/* Mapping: MIDI-note → solenoid-indeks (kun hvite tangenter C2-C3)
- * Sol 0=C2(36), 1=D2(38), 2=E2(40), 3=F2(41), 4=G2(43), 5=A2(45), 6=B2(47), 7=C3(48) */
-static const int8_t midi_to_sol[13] = {
-    0,  /* 36 C2  → sol 0 */
-   -1,  /* 37 C#2 → ingen solenoid */
-    1,  /* 38 D2  → sol 1 */
-   -1,  /* 39 D#2 → ingen solenoid */
-    2,  /* 40 E2  → sol 2 */
-    3,  /* 41 F2  → sol 3 */
-   -1,  /* 42 F#2 → ingen solenoid */
-    4,  /* 43 G2  → sol 4 */
-   -1,  /* 44 G#2 → ingen solenoid */
-    5,  /* 45 A2  → sol 5 */
-   -1,  /* 46 A#2 → ingen solenoid */
-    6,  /* 47 B2  → sol 6 */
-    7,  /* 48 C3  → sol 7 */
+/* Mapping: MIDI-note → solenoid-indeks
+ * Hvite tangenter (CH0-7):  C2(36)=0, D2(38)=1, E2(40)=2, F2(41)=3,
+ *                           G2(43)=4, A2(45)=5, B2(47)=6, C3(48)=7
+ * Svarte tangenter (CH8-15): C#2(37)=8, D#2(39)=9, F#2(42)=10, G#2(44)=11,
+ *                            A#2(46)=12, C#3(49)=13, D#3(51)=14, F#3(54)=15
+ * Merk: svarte tangenter over oktavgrensen bruker neste oktav */
+static const int8_t midi_to_sol[20] = {
+     0,  /* 36 C2  → sol 0  (hvit) */
+     8,  /* 37 C#2 → sol 8  (svart) */
+     1,  /* 38 D2  → sol 1  (hvit) */
+     9,  /* 39 D#2 → sol 9  (svart) */
+     2,  /* 40 E2  → sol 2  (hvit) */
+     3,  /* 41 F2  → sol 3  (hvit) */
+    10,  /* 42 F#2 → sol 10 (svart) */
+     4,  /* 43 G2  → sol 4  (hvit) */
+    11,  /* 44 G#2 → sol 11 (svart) */
+     5,  /* 45 A2  → sol 5  (hvit) */
+    12,  /* 46 A#2 → sol 12 (svart) */
+     6,  /* 47 B2  → sol 6  (hvit) */
+     7,  /* 48 C3  → sol 7  (hvit) */
+    13,  /* 49 C#3 → sol 13 (svart) */
+     -1, /* 50 D3  → ingen (utenfor vindu) */
+    14,  /* 51 D#3 → sol 14 (svart) */
+     -1, /* 52 E3  → ingen */
+     -1, /* 53 F3  → ingen */
+    15,  /* 54 F#3 → sol 15 (svart) */
+     -1, /* 55 G3  → ingen */
 };
 static inline int8_t note_to_solenoid(uint8_t note) {
-    if (note < BASE_MIDI_NOTE || note > 48) return -1;
+    if (note < BASE_MIDI_NOTE || note > 55) return -1;
     return midi_to_sol[note - BASE_MIDI_NOTE];
 }
 #define KICK_DURATION_MIN_MS  8    /* kick-tid ved velocity=1   */
