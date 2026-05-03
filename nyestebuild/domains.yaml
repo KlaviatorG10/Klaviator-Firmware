@@ -1,0 +1,7 @@
+default: Klaviator-Firmware
+build_dir: C:/Users/yyous/Documents/GitHub/Klaviator-Firmware/nyestebuild
+domains:
+  - name: Klaviator-Firmware
+    build_dir: C:/Users/yyous/Documents/GitHub/Klaviator-Firmware/nyestebuild/Klaviator-Firmware
+flash_order:
+  - Klaviator-Firmware

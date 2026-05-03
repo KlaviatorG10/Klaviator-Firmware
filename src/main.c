@@ -84,11 +84,39 @@ static const struct device *gpio_dev = DEVICE_DT_GET(GPIO_DEV_NODE);
  * SOLENOID CONFIGURATION  (used when TEST_MODE=0)
  * ============================================================================= */
 
-#define TOTAL_SOLENOIDS     16
-#define BASE_MIDI_NOTE      60
-#define KICK_DURATION_MS    20
+#define TOTAL_SOLENOIDS     8
+#define BASE_MIDI_NOTE      36   /* C2 - startposisjon for solenoid 0 (CH0) */
+
+/* Mapping: MIDI-note → solenoid-indeks (kun hvite tangenter C2-C3)
+ * Sol 0=C2(36), 1=D2(38), 2=E2(40), 3=F2(41), 4=G2(43), 5=A2(45), 6=B2(47), 7=C3(48) */
+static const int8_t midi_to_sol[13] = {
+    0,  /* 36 C2  → sol 0 */
+   -1,  /* 37 C#2 → ingen solenoid */
+    1,  /* 38 D2  → sol 1 */
+   -1,  /* 39 D#2 → ingen solenoid */
+    2,  /* 40 E2  → sol 2 */
+    3,  /* 41 F2  → sol 3 */
+   -1,  /* 42 F#2 → ingen solenoid */
+    4,  /* 43 G2  → sol 4 */
+   -1,  /* 44 G#2 → ingen solenoid */
+    5,  /* 45 A2  → sol 5 */
+   -1,  /* 46 A#2 → ingen solenoid */
+    6,  /* 47 B2  → sol 6 */
+    7,  /* 48 C3  → sol 7 */
+};
+static inline int8_t note_to_solenoid(uint8_t note) {
+    if (note < BASE_MIDI_NOTE || note > 48) return -1;
+    return midi_to_sol[note - BASE_MIDI_NOTE];
+}
+#define KICK_DURATION_MIN_MS  8    /* kick-tid ved velocity=1   */
+#define KICK_DURATION_MAX_MS  28   /* kick-tid ved velocity=127 */
+/* Lineær interpolasjon: kick_ms = MIN + (vel * (MAX-MIN)) / 127 */
+static inline uint32_t kick_duration_for_vel(uint8_t vel) {
+    return KICK_DURATION_MIN_MS +
+           ((uint32_t)vel * (KICK_DURATION_MAX_MS - KICK_DURATION_MIN_MS)) / 127U;
+}
 #define MIN_PWM_PERCENT     18
-#define TIMER_PERIOD_MS     5
+#define TIMER_PERIOD_MS     2
 
 /* i2c21: separate instance from UART20, free to use */
 #define I2C_DEV_NODE            DT_NODELABEL(i2c21)
@@ -150,6 +178,7 @@ static bool add_event(event_buffer_t *b, const kdaa_event_t *ev) {
     if (b->count >= EVENT_BUFFER_SIZE) {
         b->overflow_count++;
         k_mutex_unlock(&event_mutex);
+        printk("ERROR:BUFFER_FULL\n");
         return false;
     }
     b->events[b->write_index] = *ev;
@@ -194,6 +223,7 @@ struct Solenoid {
     uint8_t  channel;
     bool     in_kick_phase;
     uint32_t kick_start_time;
+    uint32_t kick_duration_ms;   /* velocity-avhengig kick-tid */
     uint32_t duration_target_ms;
     uint32_t activation_time;
 };
@@ -318,6 +348,7 @@ void activate_solenoid(uint8_t sol, uint8_t velocity, uint32_t duration_ms) {
         s->is_active = true;
         s->duration_target_ms = duration_ms;
         s->activation_time = s->kick_start_time = get_sync_time();
+        s->kick_duration_ms = kick_duration_for_vel(velocity);
         s->in_kick_phase = true;
 #if SAFE_TEST_MODE
         printk("[SAFE] ACTIVATE sol=%2d vel=%3d dur=%4dms T=%u\n",
@@ -361,14 +392,17 @@ void deactivate_all_solenoids(void) {
  * CONTROL TIMER  (kick->hold + auto-release)
  * ============================================================================= */
 
-static void control_timer_cb(struct k_timer *timer) {
+/* Work item for solenoid control — I2C must NOT be called from ISR context */
+static struct k_work solenoid_work;
+
+static void solenoid_work_handler(struct k_work *work) {
     uint32_t now = get_sync_time();
     for (int i = 0; i < TOTAL_SOLENOIDS; i++) {
         struct Solenoid *s = &solenoids[i];
         if (!s->is_active) continue;
 
         if (s->in_kick_phase &&
-            (now - s->kick_start_time) >= KICK_DURATION_MS) {
+            (now - s->kick_start_time) >= s->kick_duration_ms) {
             s->in_kick_phase = false;
             uint16_t hold = velocity_to_pwm(s->velocity);
 #if !SAFE_TEST_MODE
@@ -389,6 +423,11 @@ static void control_timer_cb(struct k_timer *timer) {
     }
 }
 
+/* Timer callback — kun submit work, ingen I2C her */
+static void control_timer_cb(struct k_timer *timer) {
+    k_work_submit(&solenoid_work);
+}
+
 K_TIMER_DEFINE(control_timer, control_timer_cb, NULL);
 
 /* =============================================================================
@@ -397,7 +436,6 @@ K_TIMER_DEFINE(control_timer, control_timer_cb, NULL);
 
 static void sequencer_loop(void *a1, void *a2, void *a3) {
     kdaa_event_t ev;
-    printk("[SEQ] Started prio=%d poll=0.05ms (50us)\n", SEQUENCER_PRIORITY);
     while (1) {
         uint32_t now = get_sync_time();
         while (peek_event(&event_buffer, &ev)) {
@@ -406,40 +444,31 @@ static void sequencer_loop(void *a1, void *a2, void *a3) {
             switch (ev.type) {
 
             case EVENT_MOVE:
-                printk("[EXEC] #%u MOVE hand=%c pos=%d T=%u actual=%u delta=%d\n",
-                       ev.sequence_number, ev.hand, ev.note_number,
-                       ev.target_time_ms, now, (int)(now - ev.target_time_ms));
                 break;
             case EVENT_STRIKE: {
-                int sol_idx = ev.note_number - BASE_MIDI_NOTE;
-                if (sol_idx >= 0 && sol_idx < TOTAL_SOLENOIDS) {
+                int8_t sol_idx = note_to_solenoid(ev.note_number);
+                if (sol_idx >= 0) {
                     activate_solenoid((uint8_t)sol_idx,
                                       ev.velocity, ev.duration_ms);
                 }
-                /* Send HIT for Note On, og REL for Note Off (for Dashboard visualisering) */
                 if (ev.velocity > 0) {
                     printk("HIT:%d\n", ev.note_number);
-                } else {
-                    printk("REL:%d\n", ev.note_number);
                 }
                 break;
             }
             case EVENT_STOP:
-                printk("[EXEC] #%u STOP\n", ev.sequence_number);
                 clear_events(&event_buffer);
                 deactivate_all_solenoids();
                 break;
             case EVENT_SYNC:
-                printk("[EXEC] #%u SYNC\n", ev.sequence_number);
                 sync_clock();
                 break;
 
             default:
-                printk("[ERROR] Unknown event %d\n", ev.type);
                 break;
             }
         }
-        k_usleep(50);  // 0.05ms = 10x bedre timing-presisjon
+        k_usleep(50);
     }
 }
 
@@ -759,9 +788,10 @@ int main(void)
 
     k_timer_start(&control_timer,
                   K_MSEC(TIMER_PERIOD_MS), K_MSEC(TIMER_PERIOD_MS));
-    printk("[INIT] Control timer %dms kick=%dms min_hold=%d%%\n",
-           TIMER_PERIOD_MS, KICK_DURATION_MS, MIN_PWM_PERCENT);
+    printk("[INIT] Control timer %dms kick=%d-%dms (vel-adaptive) min_hold=%d%%\n",
+           TIMER_PERIOD_MS, KICK_DURATION_MIN_MS, KICK_DURATION_MAX_MS, MIN_PWM_PERCENT);
 
+    k_work_init(&solenoid_work, solenoid_work_handler);
     init_event_buffer(&event_buffer);
     printk("[INIT] Event buffer %d slots\n", EVENT_BUFFER_SIZE);
 

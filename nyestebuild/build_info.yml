@@ -1,0 +1,25 @@
+cmake:
+  application:
+    source-dir: 'D:/ncs/v3.3.0/zephyr/share/sysbuild'
+  board:
+    name: 'nrf54lm20dk'
+    path:
+     - 'D:/ncs/v3.3.0/zephyr/boards/nordic/nrf54lm20dk'
+    qualifiers: 'nrf54lm20a/cpuapp'
+    revision: ''
+  images:
+   - name: 'Klaviator-Firmware'
+     source-dir: 'C:/Users/yyous/Documents/GitHub/Klaviator-Firmware'
+     type: 'MAIN'
+  kconfig:
+    files:
+     - 'C:/Users/yyous/Documents/GitHub/Klaviator-Firmware/nyestebuild/_sysbuild/empty.conf'
+     - 'C:/Users/yyous/Documents/GitHub/Klaviator-Firmware/nyestebuild/_sysbuild/empty.conf'
+    user-files:
+     - 'C:/Users/yyous/Documents/GitHub/Klaviator-Firmware/nyestebuild/_sysbuild/empty.conf'
+  sysbuild: 'true'
+version: '0.1.0'
+west:
+  command: 'D:\ncs\toolchains\936afb6332\opt\bin\Scripts\west build --build-dir c:/Users/yyous/Documents/GitHub/Klaviator-Firmware/nyestebuild c:/Users/yyous/Documents/GitHub/Klaviator-Firmware --pristine --board nrf54lm20dk/nrf54lm20a/cpuapp --sysbuild -- -DCONFIG_DEBUG_THREAD_INFO=y -DCONF_FILE=prj.conf'
+  topdir: 'd:\ncs\v3.3.0'
+  version: '1.5.0'
