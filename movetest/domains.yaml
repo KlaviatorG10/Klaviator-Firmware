@@ -1,7 +1,0 @@
-default: Klaviator-Firmware
-build_dir: C:/Users/yyous/Documents/GitHub/Klaviator-Firmware/movetest
-domains:
-  - name: Klaviator-Firmware
-    build_dir: C:/Users/yyous/Documents/GitHub/Klaviator-Firmware/movetest/Klaviator-Firmware
-flash_order:
-  - Klaviator-Firmware

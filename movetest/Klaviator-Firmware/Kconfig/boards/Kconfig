@@ -1,2 +1,0 @@
-# Load Zephyr board Kconfig descriptions.
-osource "D:/ncs/v3.3.0/zephyr/boards/nordic/nrf54lm20dk/Kconfig"
