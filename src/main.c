@@ -34,10 +34,9 @@
 #define DIR_FORWARD         1
 #define DIR_REVERSE         0
 
-static const struct device *gpio_dev = DEVICE_DT_GET(GPIO_DEV_NODE);
-
 /* Solenoid Configuration */
 #define TOTAL_SOLENOIDS     16
+#define TEST_SOLENOID_COUNT 8
 #define BASE_MIDI_NOTE      60
 #define KICK_DURATION_MS    20
 #define MIN_PWM_PERCENT     18
@@ -491,6 +490,8 @@ static void parse_kdaa(char *msg) {
 /* Motor Test Functions */
 #if TEST_MODE
 
+static const struct device *gpio_dev = DEVICE_DT_GET(GPIO_DEV_NODE);
+
 static int init_motor(void) {
     printk("[MOTOR] Initialising DM860E on gpio1\n");
     printk("[MOTOR] P1.09=STEP  P1.10=DIR  P1.11=ENA\n");
@@ -569,36 +570,24 @@ static void queue_strike(uint16_t seq, uint32_t t, uint8_t sol, uint8_t vel, uin
 }
 
 static void run_solenoid_test(void) {
-    printk("\n[TEST] Running autonomous solenoid test sequence\n");
-    printk("[TEST] Phase 1 (0.5-2.0s): Velocity sweep on sol0 (30/64/127)\n");
-    printk("[TEST] Phase 2 (3.0s): 500ms hold test (watch KICK->HOLD)\n");
-    printk("[TEST] Phase 3 (4.0s): Rapid fire x4\n");
-    printk("[TEST] Phase 4 (5.5s): All 16 solenoids ascending\n");
-    printk("[TEST] Phase 5 (9.0s): Second pass softer\n");
-    printk("[TEST] Phase 6 (12.5s): Auto-stop\n\n");
+    printk("\n[TEST] Running autonomous solenoid test sequence (TESTING FIRST %d SOLENOIDS)\n", TEST_SOLENOID_COUNT);
+    printk("[TEST] Phase 1 (0.5s): First %d solenoids at 100%% power, 500ms intervals\n", TEST_SOLENOID_COUNT);
+    printk("[TEST] Phase 2 (4.5s): Second pass at 100%% power, 500ms intervals\n");
+    printk("[TEST] Phase 3 (8.5s): Auto-stop\n\n");
 
     uint16_t seq = 1;
 
-    queue_strike(seq++,  500, 0,  30,  80);
-    queue_strike(seq++, 1200, 0,  64,  80);
-    queue_strike(seq++, 2000, 0, 127,  80);
-    queue_strike(seq++, 3000, 0,  90, 500);
-    queue_strike(seq++, 4000, 0, 100,  60);
-    queue_strike(seq++, 4080, 0, 100,  60);
-    queue_strike(seq++, 4160, 0, 100,  60);
-    queue_strike(seq++, 4240, 0, 100,  60);
-
-    for (int i = 0; i < TOTAL_SOLENOIDS; i++) {
-        queue_strike(seq++, (uint32_t)(5500 + i * 200), (uint8_t)i, 90, 120);
+    for (int i = 0; i < TEST_SOLENOID_COUNT; i++) {
+        queue_strike(seq++, (uint32_t)(500 + i * 500), (uint8_t)i, 127, 120);
     }
 
-    for (int i = 0; i < TOTAL_SOLENOIDS; i++) {
-        queue_strike(seq++, (uint32_t)(9000 + i * 200), (uint8_t)i, 70, 100);
+    for (int i = 0; i < TEST_SOLENOID_COUNT; i++) {
+        queue_strike(seq++, (uint32_t)(4500 + i * 500), (uint8_t)i, 127, 100);
     }
 
     kdaa_event_t stop = {
         .type = EVENT_STOP,
-        .target_time_ms = 12500,
+        .target_time_ms = 8500,
         .sequence_number = seq++,
         .hand = 0,
     };

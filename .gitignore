@@ -1,6 +1,7 @@
 # --- Zephyr & nRF spesifikt ---
 # Dette er mappen der alle kompilerte filer havner (veldig stor!)
 build/
+build_1/
 
 # Zephyr-spesifikke filer som lastes ned lokalt
 .west/
