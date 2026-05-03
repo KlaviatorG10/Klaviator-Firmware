@@ -1,14 +1,14 @@
 /*
  * =============================================================================
- * KLAVIATOR V4.0 - Stepper Motor + PCA9685 Solenoid Controller
+ * KLAVIATOR V4.0 - Linear Actuator + PCA9685 Solenoid Controller
  * =============================================================================
  *
- * MOTOR_TEST_MODE 1  ->  Shuttle test: motor beveger seg automatisk frem/tilbake
- * MOTOR_TEST_MODE 0  ->  KDAA modus: motor og solenoider styres fra dashboard
+ * MOTOR_TEST_MODE 1  ->  Shuttle test: automatic back-and-forth movement
+ * MOTOR_TEST_MODE 0  ->  KDAA mode: motor and solenoids controlled via dashboard
  *
  * Hardware connections:
  *
- *   MOTOR (DM860E via lineaer aktuator):
+ *   MOTOR (DM860E via linear actuator, NEMA34):
  *     P1.09  ->  DM860E PUL+  (step pulses)
  *     P1.10  ->  DM860E DIR+  (direction)
  *     P1.11  ->  DM860E ENA+  (enable, active HIGH)
@@ -23,7 +23,7 @@
  *     IRLZ44N drain   ->  solenoid-  ->  12V
  *     1N4007 across each solenoid (cathode to 12V)
  *
- *   UART (for dashboard):
+ *   UART (for KDAA dashboard):
  *     P1.13  ->  USB-UART TX
  *     P1.14  ->  USB-UART RX
  * =============================================================================
@@ -41,8 +41,8 @@
 
 /* =============================================================================
  * MOTOR TEST MODE
- * 1 = Shuttle test (automatisk frem/tilbake)
- * 0 = KDAA modus (dashboard-styrt)
+ * 1 = Shuttle test (automatic back-and-forth)
+ * 0 = KDAA mode (dashboard-controlled)
  * ============================================================================= */
 #define MOTOR_TEST_MODE     0
 
@@ -56,26 +56,35 @@
 static void queue_strike(uint16_t seq, uint32_t t, uint8_t sol, uint8_t vel, uint16_t dur);
 
 /* =============================================================================
- * MOTOR CONFIGURATION
+ * MOTOR CONFIGURATION  (DM860E stepper driver, NEMA34)
  * ============================================================================= */
 
 #define GPIO_DEV_NODE           DT_NODELABEL(gpio1)
-#define PIN_STEP                9
-#define PIN_DIR                 10
-#define PIN_ENA                 11
+#define PIN_STEP                9       /* P1.09 -> DM860E PUL+ */
+#define PIN_DIR                 10      /* P1.10 -> DM860E DIR+ */
+#define PIN_ENA                 11      /* P1.11 -> DM860E ENA+ */
 
+/* Shuttle test end positions (mm) */
 #define SHUTTLE_POS_A           0
 #define SHUTTLE_POS_B           300
 #define SHUTTLE_PAUSE_MS        500
 
+/* Calibration: motor steps per millimeter of linear travel */
 #define STEPS_PER_MM            40
+
+/* Physical rail limits */
 #define RAIL_MIN_MM             0
 #define RAIL_MAX_MM             590
 
+/* Motor speeds in microseconds per step (lower = faster) */
 #define MOTOR_SPEED_NORMAL_US   500
 #define MOTOR_SPEED_SLOW_US     1500
 #define MOTOR_SPEED_HOMING_US   2000
+
+/* Acceleration ramp: number of steps for speed ramp-up/down */
 #define MOTOR_ACCEL_STEPS       200
+
+/* Maximum steps during homing sequence */
 #define HOMING_MAX_STEPS        2000
 
 #define DIR_FORWARD             1
@@ -84,38 +93,40 @@ static void queue_strike(uint16_t seq, uint32_t t, uint8_t sol, uint8_t vel, uin
 static const struct device *gpio_dev = DEVICE_DT_GET(GPIO_DEV_NODE);
 
 /* =============================================================================
- * SOLENOID CONFIGURATION
+ * SOLENOID CONFIGURATION  (PCA9685, 16 channels)
  * ============================================================================= */
 
 #define TOTAL_SOLENOIDS     16
-#define BASE_MIDI_NOTE      36   /* C2 - startposisjon for solenoid 0 (CH0) */
+#define BASE_MIDI_NOTE      36   /* C2 = solenoid 0 (CH0) */
 
-/* Mapping: MIDI-note -> solenoid-indeks
- * Hvite tangenter (CH0-7):  C2(36)=0, D2(38)=1, E2(40)=2, F2(41)=3,
- *                           G2(43)=4, A2(45)=5, B2(47)=6, C3(48)=7
- * Svarte tangenter (CH8-15): C#2(37)=8, D#2(39)=9, F#2(42)=10, G#2(44)=11,
- *                            A#2(46)=12, C#3(49)=13, D#3(51)=14, F#3(54)=15 */
+/*
+ * MIDI note to solenoid index mapping:
+ *   White keys (CH0-7):  C2(36)=0, D2(38)=1, E2(40)=2, F2(41)=3,
+ *                        G2(43)=4, A2(45)=5, B2(47)=6, C3(48)=7
+ *   Black keys (CH8-15): C#2(37)=8, D#2(39)=9, F#2(42)=10, G#2(44)=11,
+ *                        A#2(46)=12, C#3(49)=13, D#3(51)=14, F#3(54)=15
+ */
 static const int8_t midi_to_sol[20] = {
-     0,  /* 36 C2  -> sol 0  (hvit) */
-     8,  /* 37 C#2 -> sol 8  (svart) */
-     1,  /* 38 D2  -> sol 1  (hvit) */
-     9,  /* 39 D#2 -> sol 9  (svart) */
-     2,  /* 40 E2  -> sol 2  (hvit) */
-     3,  /* 41 F2  -> sol 3  (hvit) */
-    10,  /* 42 F#2 -> sol 10 (svart) */
-     4,  /* 43 G2  -> sol 4  (hvit) */
-    11,  /* 44 G#2 -> sol 11 (svart) */
-     5,  /* 45 A2  -> sol 5  (hvit) */
-    12,  /* 46 A#2 -> sol 12 (svart) */
-     6,  /* 47 B2  -> sol 6  (hvit) */
-     7,  /* 48 C3  -> sol 7  (hvit) */
-    13,  /* 49 C#3 -> sol 13 (svart) */
-    -1,  /* 50 D3  -> ingen */
-    14,  /* 51 D#3 -> sol 14 (svart) */
-    -1,  /* 52 E3  -> ingen */
-    -1,  /* 53 F3  -> ingen */
-    15,  /* 54 F#3 -> sol 15 (svart) */
-    -1,  /* 55 G3  -> ingen */
+     0,  /* 36 C2  -> sol 0  (white) */
+     8,  /* 37 C#2 -> sol 8  (black) */
+     1,  /* 38 D2  -> sol 1  (white) */
+     9,  /* 39 D#2 -> sol 9  (black) */
+     2,  /* 40 E2  -> sol 2  (white) */
+     3,  /* 41 F2  -> sol 3  (white) */
+    10,  /* 42 F#2 -> sol 10 (black) */
+     4,  /* 43 G2  -> sol 4  (white) */
+    11,  /* 44 G#2 -> sol 11 (black) */
+     5,  /* 45 A2  -> sol 5  (white) */
+    12,  /* 46 A#2 -> sol 12 (black) */
+     6,  /* 47 B2  -> sol 6  (white) */
+     7,  /* 48 C3  -> sol 7  (white) */
+    13,  /* 49 C#3 -> sol 13 (black) */
+    -1,  /* 50 D3  -> no solenoid */
+    14,  /* 51 D#3 -> sol 14 (black) */
+    -1,  /* 52 E3  -> no solenoid */
+    -1,  /* 53 F3  -> no solenoid */
+    15,  /* 54 F#3 -> sol 15 (black) */
+    -1,  /* 55 G3  -> no solenoid */
 };
 
 static inline int8_t note_to_solenoid(uint8_t note) {
@@ -123,6 +134,7 @@ static inline int8_t note_to_solenoid(uint8_t note) {
     return midi_to_sol[note - BASE_MIDI_NOTE];
 }
 
+/* Velocity-adaptive kick duration: linear interpolation 8-28ms */
 #define KICK_DURATION_MIN_MS  8
 #define KICK_DURATION_MAX_MS  28
 
@@ -135,7 +147,7 @@ static inline uint32_t kick_duration_for_vel(uint8_t vel) {
 #define TIMER_PERIOD_MS     2
 
 /* =============================================================================
- * PCA9685 CONFIGURATION
+ * PCA9685 REGISTER MAP
  * ============================================================================= */
 
 #define I2C_DEV_NODE            DT_NODELABEL(i2c21)
@@ -152,7 +164,7 @@ static inline uint32_t kick_duration_for_vel(uint8_t vel) {
 #define PCA9685_MODE1_AI        0x20
 #define PCA9685_MODE1_ALLCALL   0x01
 #define PCA9685_MAX_PWM         4095
-#define PCA9685_PRESCALE_VALUE  0x1D
+#define PCA9685_PRESCALE_VALUE  0x1D    /* ~203 Hz */
 
 static const struct device *i2c_device = DEVICE_DT_GET(I2C_DEV_NODE);
 
@@ -262,6 +274,7 @@ static struct k_thread sequencer_thread;
 K_THREAD_STACK_DEFINE(motor_stack, MOTOR_STACK_SIZE);
 static struct k_thread motor_thread;
 
+/* Motor position and state tracking */
 static struct {
     int32_t  position_steps;
     int32_t  position_mm;
@@ -270,6 +283,7 @@ static struct {
     bool     shuttle_running;
 } motor_state = { 0, 0, false, false, false };
 
+/* Motor command queue for inter-thread communication */
 typedef struct {
     int32_t  target_mm;
     uint32_t speed_us;
@@ -321,7 +335,7 @@ static int pca9685_all_off(void) {
 }
 
 /* =============================================================================
- * VELOCITY -> PWM  (integer quadratic, no FPU)
+ * VELOCITY -> PWM  (integer quadratic curve, no FPU)
  * ============================================================================= */
 
 static uint16_t velocity_to_pwm(uint8_t v) {
@@ -424,7 +438,10 @@ void deactivate_all_solenoids(void) {
 
 /* =============================================================================
  * CONTROL TIMER  (kick->hold + auto-release)
- * k_work brukes fordi I2C IKKE kan kalles fra ISR-kontekst
+ *
+ * NOTE: I2C calls are not permitted in ISR context on Zephyr.
+ * The timer callback only submits a work item; all I2C operations
+ * are performed in solenoid_work_handler() which runs in thread context.
  * ============================================================================= */
 
 static struct k_work solenoid_work;
@@ -464,7 +481,7 @@ static void control_timer_cb(struct k_timer *timer) {
 K_TIMER_DEFINE(control_timer, control_timer_cb, NULL);
 
 /* =============================================================================
- * MOTOR DRIVER  (DM860E stepper via linear aktuator)
+ * MOTOR DRIVER  (DM860E stepper via linear actuator)
  * ============================================================================= */
 
 static void motor_set_dir(int dir) {
@@ -485,6 +502,7 @@ static void motor_run_steps(int dir, uint32_t steps, uint32_t speed_us) {
     motor_state.is_moving = true;
     for (uint32_t i = 0; i < steps; i++) {
         uint32_t us = speed_us;
+        /* Trapezoidal acceleration profile */
         if (steps > (uint32_t)(MOTOR_ACCEL_STEPS * 2)) {
             if (i < MOTOR_ACCEL_STEPS) {
                 uint32_t f = MOTOR_ACCEL_STEPS - i;
@@ -503,19 +521,15 @@ static void motor_run_steps(int dir, uint32_t steps, uint32_t speed_us) {
 }
 
 static void motor_home(void) {
-    printk("[MOTOR] Homing...\n");
-    gpio_pin_set(gpio_dev, PIN_ENA, 1);
-    k_msleep(50);
-    motor_set_dir(DIR_REVERSE);
-    for (uint32_t i = 0; i < HOMING_MAX_STEPS; i++) {
-        motor_step_pulse(MOTOR_SPEED_HOMING_US);
-    }
-    k_msleep(200);
-    motor_run_steps(DIR_FORWARD, 5 * STEPS_PER_MM, MOTOR_SPEED_HOMING_US);
+    /*
+     * Without end-stop switches, assume the actuator is already at position 0mm.
+     * Position the actuator manually at the start position before powering on.
+     */
     motor_state.position_steps = 0;
     motor_state.position_mm = 0;
     motor_state.is_homed = true;
-    printk("[MOTOR] Homed. Posisjon = 0mm\n");
+    printk("[MOTOR] Position set to 0mm (no end-stop switch).\n");
+    printk("[MOTOR] Ensure actuator is at start position before sending moves.\n");
 }
 
 static void motor_goto_mm(int32_t target_mm, uint32_t speed_us) {
@@ -526,28 +540,35 @@ static void motor_goto_mm(int32_t target_mm, uint32_t speed_us) {
     if (delta == 0) return;
     int      dir   = (delta > 0) ? DIR_FORWARD : DIR_REVERSE;
     uint32_t steps = (uint32_t)abs(delta);
-    printk("[MOTOR] %dmm -> %dmm (%d steg)\n",
+    printk("[MOTOR] %dmm -> %dmm (%d steps)\n",
            motor_state.position_mm, target_mm, steps);
     motor_run_steps(dir, steps, speed_us);
-    printk("[MOTOR] Ankom %dmm\n", motor_state.position_mm);
+    printk("[MOTOR] Arrived at %dmm\n", motor_state.position_mm);
 }
 
 static void motor_queue_move(int32_t target_mm, uint32_t speed_us) {
     motor_cmd_t cmd = { .target_mm = target_mm, .speed_us = speed_us };
     if (k_msgq_put(&motor_msgq, &cmd, K_NO_WAIT) != 0) {
-        printk("[WARN] Motor ko full\n");
+        printk("[WARN] Motor command queue full\n");
     }
 }
 
 static void motor_thread_fn(void *a1, void *a2, void *a3) {
-    printk("[MOTOR] Trad startet\n");
+    printk("[MOTOR] Thread started — waiting 5 seconds...\n");
+    printk("[MOTOR] Place actuator at 0mm start position now!\n");
+    k_msleep(5000);
+    printk("[MOTOR] Initializing GPIO...\n");
+
     if (!device_is_ready(gpio_dev)) {
-        printk("[ERROR] Motor GPIO ikke klar\n");
+        printk("[ERROR] Motor GPIO not ready\n");
         return;
     }
     gpio_pin_configure(gpio_dev, PIN_STEP, GPIO_OUTPUT_INACTIVE);
     gpio_pin_configure(gpio_dev, PIN_DIR,  GPIO_OUTPUT_INACTIVE);
     gpio_pin_configure(gpio_dev, PIN_ENA,  GPIO_OUTPUT_INACTIVE);
+
+    gpio_pin_set(gpio_dev, PIN_ENA, 1);
+    k_msleep(100);
 
     motor_home();
 
@@ -555,7 +576,7 @@ static void motor_thread_fn(void *a1, void *a2, void *a3) {
     motor_state.shuttle_running = true;
     bool at_a = true;
     uint32_t pass = 0;
-    printk("[MOTOR] Shuttle-modus: %dmm <-> %dmm\n", SHUTTLE_POS_A, SHUTTLE_POS_B);
+    printk("[MOTOR] Shuttle mode: %dmm <-> %dmm\n", SHUTTLE_POS_A, SHUTTLE_POS_B);
     while (1) {
         if (at_a) {
             printk("[MOTOR] Pass %u -> %dmm\n", pass, SHUTTLE_POS_B);
@@ -790,14 +811,14 @@ int main(void)
                     sequencer_loop, NULL, NULL, NULL,
                     SEQUENCER_PRIORITY, 0, K_NO_WAIT);
     k_thread_name_set(&sequencer_thread, "sequencer");
-    printk("[INIT] Sequencer startet\n");
+    printk("[INIT] Sequencer started\n");
 
     k_thread_create(&motor_thread, motor_stack,
                     K_THREAD_STACK_SIZEOF(motor_stack),
                     motor_thread_fn, NULL, NULL, NULL,
                     MOTOR_PRIORITY, 0, K_NO_WAIT);
     k_thread_name_set(&motor_thread, "motor");
-    printk("[INIT] Motor-trad startet\n");
+    printk("[INIT] Motor thread started\n");
 
 #if SAFE_TEST_MODE
     printk("[WARN] SAFE_TEST_MODE=1 - no hardware output\n");
@@ -805,7 +826,7 @@ int main(void)
     printk("[READY] System ready\n\n");
 
 #if ENABLE_UART_MODE
-    printk("UART KDAA V4.0. Full: S:H:N:V:T:D  Move: M:H:P:T\n\n");
+    printk("UART KDAA V4.0. Commands: S:H:N:V:T:D  M:H:P:T  SYNC  STOP\n\n");
     if (!device_is_ready(uart_dev)) {
         printk("[WARN] UART not ready\n");
         uint32_t n = 0;
@@ -822,7 +843,7 @@ int main(void)
             printk("[HB] waiting (%u) motor=%dmm\n", hb++, motor_state.position_mm);
     }
 #else
-    printk("[INFO] Standalone. Set ENABLE_UART_MODE=1 for dashboard.\n\n");
+    printk("[INFO] Standalone mode. Set ENABLE_UART_MODE=1 for dashboard.\n\n");
     uint32_t n = 0;
     while (1) {
         printk("[HB] alive %u motor=%dmm\n", n++, motor_state.position_mm);

@@ -1,0 +1,13 @@
+# Target labels
+ Klaviator-Firmware
+# Source files and their labels
+C:/Users/yyous/Documents/GitHub/Klaviator-Firmware/movetest/_sysbuild/sysbuild/images/CMakeFiles/Klaviator-Firmware
+C:/Users/yyous/Documents/GitHub/Klaviator-Firmware/movetest/_sysbuild/sysbuild/images/CMakeFiles/Klaviator-Firmware.rule
+C:/Users/yyous/Documents/GitHub/Klaviator-Firmware/movetest/_sysbuild/sysbuild/images/CMakeFiles/Klaviator-Firmware-complete.rule
+C:/Users/yyous/Documents/GitHub/Klaviator-Firmware/movetest/_sysbuild/sysbuild/images/Klaviator-Firmware-prefix/src/Klaviator-Firmware-stamp/Klaviator-Firmware-build.rule
+C:/Users/yyous/Documents/GitHub/Klaviator-Firmware/movetest/_sysbuild/sysbuild/images/Klaviator-Firmware-prefix/src/Klaviator-Firmware-stamp/Klaviator-Firmware-configure.rule
+C:/Users/yyous/Documents/GitHub/Klaviator-Firmware/movetest/_sysbuild/sysbuild/images/Klaviator-Firmware-prefix/src/Klaviator-Firmware-stamp/Klaviator-Firmware-download.rule
+C:/Users/yyous/Documents/GitHub/Klaviator-Firmware/movetest/_sysbuild/sysbuild/images/Klaviator-Firmware-prefix/src/Klaviator-Firmware-stamp/Klaviator-Firmware-install.rule
+C:/Users/yyous/Documents/GitHub/Klaviator-Firmware/movetest/_sysbuild/sysbuild/images/Klaviator-Firmware-prefix/src/Klaviator-Firmware-stamp/Klaviator-Firmware-mkdir.rule
+C:/Users/yyous/Documents/GitHub/Klaviator-Firmware/movetest/_sysbuild/sysbuild/images/Klaviator-Firmware-prefix/src/Klaviator-Firmware-stamp/Klaviator-Firmware-patch.rule
+C:/Users/yyous/Documents/GitHub/Klaviator-Firmware/movetest/_sysbuild/sysbuild/images/Klaviator-Firmware-prefix/src/Klaviator-Firmware-stamp/Klaviator-Firmware-update.rule
