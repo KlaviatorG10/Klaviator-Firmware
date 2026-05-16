@@ -5,8 +5,8 @@
 
 / {
 	chosen {
-		zephyr,console = &uart20;
-		zephyr,shell-uart = &uart20;
+		zephyr,console = &uart30;
+		zephyr,shell-uart = &uart30;
 	};
 
 	solenoids {
@@ -18,8 +18,17 @@
 		};
 	};
 
+	dtsendstop {
+		compatible = "gpio-keys";
+		endstop_switch: endstop_switch {
+			gpios = <&gpio1 12 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+			label = "End-stop switch";
+		};
+	};
+
 	aliases {
 		solenoid = &solenoid0;
+		dtsendstop = &endstop_switch;
 	};
 };
 
@@ -31,6 +40,11 @@
 	status = "okay";
 	current-speed = <1000000>;
 	hw-flow-control;
+};
+
+&uart30 {
+	status = "okay";
+	current-speed = <1000000>;
 };
 
 &pinctrl {

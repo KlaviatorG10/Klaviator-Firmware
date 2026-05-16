@@ -2,6 +2,7 @@
 # Dette er mappen der alle kompilerte filer havner (veldig stor!)
 build/
 build_1/
+build_*/
 
 # Zephyr-spesifikke filer som lastes ned lokalt
 .west/
