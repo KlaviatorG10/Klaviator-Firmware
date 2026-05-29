@@ -56,17 +56,24 @@ static void queue_strike(uint16_t seq, uint32_t t, uint8_t sol, uint8_t vel, uin
 /* Calibration: motor steps per millimeter of linear travel */
 #define STEPS_PER_MM            54
 
+/* Fine calibration: T3 is about 3mm physical short.
+ * Dashboard input scale is ~7.4625mm physical per input unit, so:
+ * 3 / 7.4625 * 54 = about 22 motor steps.
+ */
+#define STATE3_TARGET_MM        37
+#define STATE3_FINE_OFFSET_STEPS 22
+
 /* Physical rail limits */
 #define RAIL_MIN_MM             0
 #define RAIL_MAX_MM             60
 
 /* Motor speeds in microseconds per step (lower = faster) */
-#define MOTOR_SPEED_NORMAL_US   500
+#define MOTOR_SPEED_NORMAL_US   180
 #define MOTOR_SPEED_SLOW_US     1500
 #define MOTOR_SPEED_HOMING_US   1000
 
 /* Acceleration ramp: number of steps for speed ramp-up/down */
-#define MOTOR_ACCEL_STEPS       200
+#define MOTOR_ACCEL_STEPS       40
 
 /* Maximum steps during homing sequence */
 #define HOMING_MAX_STEPS        30000
@@ -105,6 +112,7 @@ static const int8_t midi_to_sol[19] = {
 
 static inline bool is_black_key(uint8_t midi_note);
 static int8_t note_to_solenoid(uint8_t note);
+static int8_t stationary_note_to_solenoid(uint8_t note);
 
 /* Velocity-adaptive kick duration: linear interpolation 15-45ms */
 #define KICK_DURATION_MIN_MS  15
@@ -115,13 +123,15 @@ static inline uint32_t kick_duration_for_vel(uint8_t vel) {
            ((uint32_t)vel * (KICK_DURATION_MAX_MS - KICK_DURATION_MIN_MS)) / 127U;
 }
 
-#define MIN_PWM_PERCENT     18
-#define TIMER_PERIOD_MS     2
+#define MIN_PWM_PERCENT      70
+#define HOLD_PWM_MAX_PERCENT 70
+#define TIMER_PERIOD_MS      2
 
 /* PCA9685 REGISTER MAP */
 
 #define I2C_DEV_NODE            DT_NODELABEL(i2c21)
 #define PCA9685_I2C_ADDR        0x40
+#define PCA9685_STATIONARY_ADDR 0x41
 #define PCA9685_MODE1           0x00
 #define PCA9685_MODE2           0x01
 #define PCA9685_LED0_ON_L       0x06
@@ -159,6 +169,7 @@ typedef struct {
 } kdaa_event_t;
 
 #define EVENT_BUFFER_SIZE 2048
+#define DEFERRED_MOVING_EVENT_SIZE 256
 typedef struct {
     kdaa_event_t      events[EVENT_BUFFER_SIZE];
     volatile uint16_t write_index, read_index, count;
@@ -167,6 +178,7 @@ typedef struct {
 
 static K_MUTEX_DEFINE(event_mutex);
 static event_buffer_t event_buffer;
+K_MSGQ_DEFINE(deferred_moving_msgq, sizeof(kdaa_event_t), DEFERRED_MOVING_EVENT_SIZE, 4);
 
 static void init_event_buffer(event_buffer_t *b) { memset(b, 0, sizeof(*b)); }
 
@@ -210,6 +222,15 @@ static void clear_events(event_buffer_t *b) {
     k_mutex_unlock(&event_mutex);
 }
 
+static void clear_deferred_moving_events(void) {
+    k_msgq_purge(&deferred_moving_msgq);
+}
+
+static bool has_deferred_moving_event(void) {
+    kdaa_event_t ev;
+    return k_msgq_peek(&deferred_moving_msgq, &ev) == 0;
+}
+
 /* SOLENOID STATE */
 
 struct Solenoid {
@@ -223,6 +244,7 @@ struct Solenoid {
     uint32_t activation_time;
 };
 static struct Solenoid solenoids[TOTAL_SOLENOIDS];
+static struct Solenoid stationary_solenoids[TOTAL_SOLENOIDS];
 
 /* THREAD DEFINITIONS */
 
@@ -251,19 +273,15 @@ static inline bool is_black_key(uint8_t midi_note) {
 }
 
 static int8_t note_to_solenoid(uint8_t note) {
-    if (note < 48 || note > 101) return -1;
+    if (note < 48 || note > 102) return -1;
 
     /*
-     * Four calibrated positions are used for the current white-key test:
+     * Four calibrated positions are used for the current moving-module test:
      *   state 1:  0mm, S0 = C3
      *   state 2: 19 input, S0 = D4
      *   state 3: 37 input, S0 = E5
      *   state 4: 56 input, S0 = F6
-     *
-     * Black keys are left unmapped until their positions are measured.
      */
-    if (is_black_key(note)) return -1;
-
     static const uint8_t state_white_notes[] = {
         48, 50, 52, 53, 55, 57, 59, 60, 62, 64, 65, 67, 69, 71, 72, 74,
         76, 77, 79, 81, 83, 84, 86, 88, 89, 91, 93, 95, 96, 98, 100, 101
@@ -274,6 +292,13 @@ static int8_t note_to_solenoid(uint8_t note) {
         8,   /* state 2: D4 */
         16,  /* state 3: E5 */
         24   /* state 4: F6 */
+    };
+
+    static const uint8_t state_black_notes[4][8] = {
+        { 49, 51, 0, 54, 56, 58, 0, 61 },       /* T1: S8 C#3, S9 D#3, S11 F#3, S12 G#3, S13 A#3, S15 C#4 */
+        { 63, 0, 66, 68, 70, 0, 73, 75 },       /* T2: S8 D#4, S10 F#4, S11 G#4, S12 A#4, S14 C#5, S15 D#5 */
+        { 0, 78, 80, 82, 0, 85, 87, 0 },        /* T3: S9 F#5, S10 G#5, S11 A#5, S13 C#6, S14 D#6 */
+        { 90, 92, 94, 0, 97, 99, 0, 102 },      /* T4: S8 F#6, S9 G#6, S10 A#6, S12 C#7, S13 D#7, S15 F#7 */
     };
 
     int32_t pos_mm = (motor_state.position_steps + (STEPS_PER_MM / 2)) / STEPS_PER_MM;
@@ -295,12 +320,22 @@ static int8_t note_to_solenoid(uint8_t note) {
             break;
         }
     }
-    if (note_white_idx < 0) return -1;
+    if (note_white_idx >= 0) {
+        int16_t relative_white = note_white_idx - state_base_white_idx[state];
+        if (relative_white >= 0 && relative_white < 8) {
+            return (int8_t)relative_white;
+        }
+    }
 
-    int16_t relative_white = note_white_idx - state_base_white_idx[state];
-    if (relative_white < 0 || relative_white >= 8) return -1;
+    if (is_black_key(note)) {
+        for (uint8_t sol = 0; sol < 8; sol++) {
+            if (state_black_notes[state][sol] == note) {
+                return (int8_t)(sol + 8);
+            }
+        }
+    }
 
-    return (int8_t)relative_white;
+    return -1;
 
 #if 0
 
@@ -332,6 +367,30 @@ static int8_t note_to_solenoid(uint8_t note) {
 #endif
 }
 
+static int8_t stationary_note_to_solenoid(uint8_t note) {
+    static const int8_t stationary_map[] = {
+        0,   /* 24 C1  -> S0  */
+        9,   /* 25 C#1 -> S9  */
+        1,   /* 26 D1  -> S1  */
+        10,  /* 27 D#1 -> S10 */
+        2,   /* 28 E1  -> S2  */
+        3,   /* 29 F1  -> S3  */
+        11,  /* 30 F#1 -> S11 */
+        4,   /* 31 G1  -> S4  */
+        12,  /* 32 G#1 -> S12 */
+        5,   /* 33 A1  -> S5  */
+        13,  /* 34 A#1 -> S13 */
+        6,   /* 35 B1  -> S6  */
+        7,   /* 36 C2  -> S7  */
+        14,  /* 37 C#2 -> S14 */
+        8,   /* 38 D2  -> S8  */
+        15,  /* 39 D#2 -> S15 */
+    };
+
+    if (note < 24 || note > 39) return -1;
+    return stationary_map[note - 24];
+}
+
 /* Motor command queue for inter-thread communication */
 typedef struct {
     int32_t  target_mm;
@@ -353,12 +412,16 @@ static int  rx_pos = 0;
 
 /* PCA9685 DRIVER */
 
-static int pca9685_write_reg(uint8_t reg, uint8_t val) {
+static int pca9685_write_reg_at(uint8_t addr, uint8_t reg, uint8_t val) {
     uint8_t buf[2] = { reg, val };
-    return i2c_write(i2c_device, buf, 2, PCA9685_I2C_ADDR);
+    return i2c_write(i2c_device, buf, 2, addr);
 }
 
-static int pca9685_set_channel(uint8_t ch, uint16_t v) {
+static int pca9685_write_reg(uint8_t reg, uint8_t val) {
+    return pca9685_write_reg_at(PCA9685_I2C_ADDR, reg, val);
+}
+
+static int pca9685_set_channel_at(uint8_t addr, uint8_t ch, uint16_t v) {
     if (ch >= 16) return -EINVAL;
     uint8_t reg = PCA9685_LED0_ON_L + (ch * 4);
     uint8_t buf[5];
@@ -367,25 +430,33 @@ static int pca9685_set_channel(uint8_t ch, uint16_t v) {
     else if (v >= PCA9685_MAX_PWM) { buf[1]=0x00; buf[2]=0x10; buf[3]=0x00; buf[4]=0x00; }
     else                           { buf[1]=0x00; buf[2]=0x00;
                                      buf[3]=(uint8_t)(v & 0xFF); buf[4]=(uint8_t)(v >> 8); }
-    return i2c_write(i2c_device, buf, 5, PCA9685_I2C_ADDR);
+    return i2c_write(i2c_device, buf, 5, addr);
+}
+
+static int pca9685_set_channel(uint8_t ch, uint16_t v) {
+    return pca9685_set_channel_at(PCA9685_I2C_ADDR, ch, v);
+}
+
+static int pca9685_all_off_at(uint8_t addr) {
+    int r = 0;
+    r |= pca9685_write_reg_at(addr, PCA9685_ALL_LED_ON_L,  0x00);
+    r |= pca9685_write_reg_at(addr, PCA9685_ALL_LED_ON_H,  0x00);
+    r |= pca9685_write_reg_at(addr, PCA9685_ALL_LED_OFF_L, 0x00);
+    r |= pca9685_write_reg_at(addr, PCA9685_ALL_LED_OFF_H, 0x10);
+    return r;
 }
 
 static int pca9685_all_off(void) {
-    int r = 0;
-    r |= pca9685_write_reg(PCA9685_ALL_LED_ON_L,  0x00);
-    r |= pca9685_write_reg(PCA9685_ALL_LED_ON_H,  0x00);
-    r |= pca9685_write_reg(PCA9685_ALL_LED_OFF_L, 0x00);
-    r |= pca9685_write_reg(PCA9685_ALL_LED_OFF_H, 0x10);
-    return r;
+    return pca9685_all_off_at(PCA9685_I2C_ADDR);
 }
 
 /* VELOCITY -> PWM  (integer quadratic curve, no FPU) */
 
 static uint16_t velocity_to_pwm(uint8_t v) {
     if (v == 0)   return 0;
-    if (v >= 127) return PCA9685_MAX_PWM;
     uint32_t v2  = (uint32_t)v * v;
-    uint32_t pct = MIN_PWM_PERCENT + (v2 * (100U - MIN_PWM_PERCENT)) / (127U * 127U);
+    uint32_t pct = MIN_PWM_PERCENT +
+                   (v2 * (HOLD_PWM_MAX_PERCENT - MIN_PWM_PERCENT)) / (127U * 127U);
     return (uint16_t)((pct * PCA9685_MAX_PWM) / 100U);
 }
 
@@ -408,6 +479,15 @@ static void init_solenoid_data(void) {
     printk("\n");
 }
 
+static void init_stationary_solenoid_data(void) {
+    printk("\n[INIT] Stationary solenoid map (PCA9685 0x%02X CH0-15):\n", PCA9685_STATIONARY_ADDR);
+    for (int i = 0; i < TOTAL_SOLENOIDS; i++) {
+        stationary_solenoids[i] = (struct Solenoid){ .channel = (uint8_t)i };
+        printk("  Stationary Sol %2d  CH%2d\n", i, i);
+    }
+    printk("\n");
+}
+
 static int init_pca9685(void) {
     printk("[INIT] PCA9685 on i2c21 addr=0x%02X prescaler=0x%02X (~200Hz)\n",
            PCA9685_I2C_ADDR, PCA9685_PRESCALE_VALUE);
@@ -426,13 +506,31 @@ static int init_pca9685(void) {
     return 0;
 }
 
+static int init_stationary_pca9685(void) {
+    printk("[INIT] Stationary PCA9685 on i2c21 addr=0x%02X prescaler=0x%02X (~200Hz)\n",
+           PCA9685_STATIONARY_ADDR, PCA9685_PRESCALE_VALUE);
+    if (!device_is_ready(i2c_device)) {
+        printk("[ERROR] i2c21 not ready for stationary PCA9685\n");
+        return -ENODEV;
+    }
+    if (pca9685_write_reg_at(PCA9685_STATIONARY_ADDR, PCA9685_MODE1, PCA9685_MODE1_SLEEP)) return -EIO;
+    k_usleep(500);
+    if (pca9685_write_reg_at(PCA9685_STATIONARY_ADDR, PCA9685_PRESCALE, PCA9685_PRESCALE_VALUE)) return -EIO;
+    if (pca9685_write_reg_at(PCA9685_STATIONARY_ADDR, PCA9685_MODE1, PCA9685_MODE1_AI | PCA9685_MODE1_ALLCALL)) return -EIO;
+    k_usleep(500);
+    if (pca9685_write_reg_at(PCA9685_STATIONARY_ADDR, PCA9685_MODE2, 0x04)) return -EIO;
+    if (pca9685_all_off_at(PCA9685_STATIONARY_ADDR)) return -EIO;
+    printk("[INIT] Stationary PCA9685 ready\n");
+    return 0;
+}
+
 /* SOLENOID CONTROL */
 
 void activate_solenoid(uint8_t sol, uint8_t velocity, uint32_t duration_ms) {
     if (sol >= TOTAL_SOLENOIDS) return;
     struct Solenoid *s = &solenoids[sol];
     if (velocity > 0) {
-        s->velocity = (s->channel >= 8) ? 127 : velocity;
+        s->velocity = velocity;
         s->is_active = true;
         s->duration_target_ms = duration_ms;
         s->activation_time = s->kick_start_time = get_sync_time();
@@ -463,16 +561,55 @@ void activate_solenoid(uint8_t sol, uint8_t velocity, uint32_t duration_ms) {
 
 void deactivate_solenoid(uint8_t sol) { activate_solenoid(sol, 0, 0); }
 
+void activate_stationary_solenoid(uint8_t sol, uint8_t velocity, uint32_t duration_ms) {
+    if (sol >= TOTAL_SOLENOIDS) return;
+    struct Solenoid *s = &stationary_solenoids[sol];
+    if (velocity > 0) {
+        s->velocity = velocity;
+        s->is_active = true;
+        s->duration_target_ms = duration_ms;
+        s->activation_time = s->kick_start_time = get_sync_time();
+        s->kick_duration_ms = kick_duration_for_vel(velocity);
+        s->in_kick_phase = true;
+#if SAFE_TEST_MODE
+        printk("[SAFE-ST] ACTIVATE sol=%2d vel=%3d dur=%4dms T=%u\n",
+               sol, velocity, duration_ms, s->activation_time);
+#else
+        pca9685_set_channel_at(PCA9685_STATIONARY_ADDR, s->channel, PCA9685_MAX_PWM);
+        printk("[KICK-ST] sol=%2d ch=%2d vel=%3d dur=%4dms T=%u\n",
+               sol, s->channel, velocity, duration_ms, s->activation_time);
+#endif
+    } else {
+        s->velocity = 0;
+        s->is_active = false;
+        s->in_kick_phase = false;
+        s->duration_target_ms = 0;
+#if SAFE_TEST_MODE
+        printk("[SAFE-ST] RELEASE sol=%2d T=%u\n", sol, get_sync_time());
+#else
+        pca9685_set_channel_at(PCA9685_STATIONARY_ADDR, s->channel, 0);
+        printk("[REL-ST]  sol=%2d ch=%2d T=%u\n", sol, s->channel, get_sync_time());
+#endif
+    }
+}
+
+void deactivate_stationary_solenoid(uint8_t sol) { activate_stationary_solenoid(sol, 0, 0); }
+
 void deactivate_all_solenoids(void) {
     printk("[ALL-OFF]\n");
 #if !SAFE_TEST_MODE
     pca9685_all_off();
+    pca9685_all_off_at(PCA9685_STATIONARY_ADDR);
 #endif
     for (int i = 0; i < TOTAL_SOLENOIDS; i++) {
         solenoids[i].velocity = 0;
         solenoids[i].is_active = false;
         solenoids[i].in_kick_phase = false;
         solenoids[i].duration_target_ms = 0;
+        stationary_solenoids[i].velocity = 0;
+        stationary_solenoids[i].is_active = false;
+        stationary_solenoids[i].in_kick_phase = false;
+        stationary_solenoids[i].duration_target_ms = 0;
     }
 }
 
@@ -494,7 +631,7 @@ static void solenoid_work_handler(struct k_work *work) {
         if (s->in_kick_phase &&
             (now - s->kick_start_time) >= s->kick_duration_ms) {
             s->in_kick_phase = false;
-            uint16_t hold = PCA9685_MAX_PWM;
+            uint16_t hold = velocity_to_pwm(s->velocity);
 #if !SAFE_TEST_MODE
             pca9685_set_channel(s->channel, hold);
 #endif
@@ -509,6 +646,31 @@ static void solenoid_work_handler(struct k_work *work) {
                    i, s->duration_target_ms, now,
                    SAFE_TEST_MODE ? " (SIM)" : "");
             deactivate_solenoid(i);
+        }
+    }
+
+    for (int i = 0; i < TOTAL_SOLENOIDS; i++) {
+        struct Solenoid *s = &stationary_solenoids[i];
+        if (!s->is_active) continue;
+
+        if (s->in_kick_phase &&
+            (now - s->kick_start_time) >= s->kick_duration_ms) {
+            s->in_kick_phase = false;
+            uint16_t hold = velocity_to_pwm(s->velocity);
+#if !SAFE_TEST_MODE
+            pca9685_set_channel_at(PCA9685_STATIONARY_ADDR, s->channel, hold);
+#endif
+            printk("[HOLD-ST] sol=%2d ch=%2d vel=%3d pwm=%4u T=%u%s\n",
+                   i, s->channel, s->velocity, hold, now,
+                   SAFE_TEST_MODE ? " (SIM)" : "");
+        }
+
+        if (s->duration_target_ms > 0 &&
+            (now - s->activation_time) >= s->duration_target_ms) {
+            printk("[AUTO-ST] sol=%2d dur=%4dms T=%u%s\n",
+                   i, s->duration_target_ms, now,
+                   SAFE_TEST_MODE ? " (SIM)" : "");
+            deactivate_stationary_solenoid(i);
         }
     }
 }
@@ -605,6 +767,9 @@ static void motor_goto_mm(int32_t target_mm, uint32_t speed_us) {
     if (target_mm < RAIL_MIN_MM) target_mm = RAIL_MIN_MM;
     if (target_mm > RAIL_MAX_MM) target_mm = RAIL_MAX_MM;
     int32_t  target_steps = (int32_t)(target_mm * STEPS_PER_MM);
+    if (target_mm == STATE3_TARGET_MM) {
+        target_steps += STATE3_FINE_OFFSET_STEPS;
+    }
     int32_t  delta        = target_steps - motor_state.position_steps;
     if (delta == 0) {
         motor_state.is_moving = false;
@@ -625,24 +790,55 @@ static bool any_solenoid_active(void) {
     return false;
 }
 
-static void wait_until_solenoids_released(void) {
-    while (any_solenoid_active()) {
-        k_msleep(1);
-    }
-}
-
-static void wait_until_motor_stopped(void) {
-    while (motor_state.is_moving) {
-        k_msleep(1);
-    }
-}
-
 static void motor_queue_move(int32_t target_mm, uint32_t speed_us) {
     motor_cmd_t cmd = { .target_mm = target_mm, .speed_us = speed_us };
     motor_state.is_moving = true;
     if (k_msgq_put(&motor_msgq, &cmd, K_NO_WAIT) != 0) {
         motor_state.is_moving = false;
         printk("[WARN] Motor command queue full\n");
+    }
+}
+
+static void execute_moving_strike(const kdaa_event_t *ev) {
+    int8_t sol_idx = note_to_solenoid(ev->note_number);
+    if (sol_idx >= 0) {
+        activate_solenoid((uint8_t)sol_idx, ev->velocity, ev->duration_ms);
+        if (ev->velocity > 0) {
+            printk("HIT:%d\n", ev->note_number);
+        }
+    } else {
+        printk("[MISS] note=%d pos=%dmm no_solenoid\n",
+               ev->note_number, motor_state.position_mm);
+    }
+}
+
+static void process_deferred_moving_events(uint32_t now) {
+    kdaa_event_t ev;
+
+    while (k_msgq_peek(&deferred_moving_msgq, &ev) == 0) {
+        if (now < ev.target_time_ms) {
+            break;
+        }
+
+        if (ev.type == EVENT_MOVE) {
+            if (any_solenoid_active()) {
+                break;
+            }
+            k_msgq_get(&deferred_moving_msgq, &ev, K_NO_WAIT);
+            motor_queue_move((int32_t)ev.note_number, MOTOR_SPEED_NORMAL_US);
+            break;
+        }
+
+        if (ev.type == EVENT_STRIKE) {
+            if (motor_state.is_moving) {
+                break;
+            }
+            k_msgq_get(&deferred_moving_msgq, &ev, K_NO_WAIT);
+            execute_moving_strike(&ev);
+            continue;
+        }
+
+        k_msgq_get(&deferred_moving_msgq, &ev, K_NO_WAIT);
     }
 }
 
@@ -678,32 +874,53 @@ static void sequencer_loop(void *a1, void *a2, void *a3) {
 
     while (1) {
         uint32_t now = get_sync_time();
+        process_deferred_moving_events(now);
+
         while (peek_event(&event_buffer, &ev)) {
             if (now < ev.target_time_ms) break;
             pop_event(&event_buffer, &ev);
             switch (ev.type) {
             case EVENT_MOVE:
-                /* Sikkerhet: modulen får ikke bevege seg før solenoidene er oppe igjen. */
-                wait_until_solenoids_released();
+                /*
+                 * Moving-module operations keep their order in the deferred
+                 * queue, but stationary notes do not have to wait behind them.
+                 */
+                if (any_solenoid_active() || has_deferred_moving_event()) {
+                    if (k_msgq_put(&deferred_moving_msgq, &ev, K_NO_WAIT) != 0) {
+                        printk("[MISS] move=%d moving_defer_failed\n", ev.note_number);
+                    }
+                    break;
+                }
                 motor_queue_move((int32_t)ev.note_number, MOTOR_SPEED_NORMAL_US);
                 break;
             case EVENT_STRIKE: {
-                /* Sikkerhet: solenoid får ikke slå før modulen har stoppet helt. */
-                wait_until_motor_stopped();
-                int8_t sol_idx = note_to_solenoid(ev.note_number);
-                if (sol_idx >= 0) {
-                    activate_solenoid((uint8_t)sol_idx, ev.velocity, ev.duration_ms);
+                int8_t stationary_idx = stationary_note_to_solenoid(ev.note_number);
+                if (stationary_idx >= 0) {
+                    activate_stationary_solenoid((uint8_t)stationary_idx, ev.velocity, ev.duration_ms);
                     if (ev.velocity > 0) {
                         printk("HIT:%d\n", ev.note_number);
                     }
-                } else {
-                    printk("[MISS] note=%d pos=%dmm no_solenoid\n",
-                           ev.note_number, motor_state.position_mm);
+                    break;
                 }
+
+                /*
+                 * Moving-solenoids cannot strike while the carriage is moving.
+                 * Defer instead of blocking, so stationary notes behind this
+                 * event can still play during motor travel.
+                 */
+                if (motor_state.is_moving || has_deferred_moving_event()) {
+                    if (k_msgq_put(&deferred_moving_msgq, &ev, K_NO_WAIT) != 0) {
+                        printk("[MISS] note=%d motor_busy_defer_failed\n", ev.note_number);
+                    }
+                    break;
+                }
+
+                execute_moving_strike(&ev);
                 break;
             }
             case EVENT_STOP:
                 clear_events(&event_buffer);
+                clear_deferred_moving_events();
                 deactivate_all_solenoids();
                 break;
             case EVENT_SYNC:
@@ -748,6 +965,7 @@ static void parse_kdaa(char *msg) {
 
     if (strncmp(msg, "SYNC", 4) == 0) {
         clear_events(&event_buffer);
+        clear_deferred_moving_events();
         sync_clock();
         printk("[MCU] SYNC OK - Clock Reset\n");
         return;
@@ -761,6 +979,7 @@ static void parse_kdaa(char *msg) {
     if (strcmp(msg, "STOP") == 0 || strcasecmp(msg, "all:0") == 0) {
         deactivate_all_solenoids();
         init_event_buffer(&event_buffer);
+        clear_deferred_moving_events();
         printk("[MCU] HALTED\n");
         return;
     }
@@ -866,12 +1085,17 @@ int main(void)
     if (init_pca9685() < 0)
         printk("[WARN] PCA9685 failed - check wiring\n");
 
+    if (init_stationary_pca9685() < 0)
+        printk("[WARN] Stationary PCA9685 failed - check wiring/address 0x%02X\n", PCA9685_STATIONARY_ADDR);
+
     init_solenoid_data();
+    init_stationary_solenoid_data();
     sync_clock();
 
     k_timer_start(&control_timer, K_MSEC(TIMER_PERIOD_MS), K_MSEC(TIMER_PERIOD_MS));
-    printk("[INIT] Control timer %dms kick=%d-%dms (vel-adaptive) min_hold=%d%%\n",
-           TIMER_PERIOD_MS, KICK_DURATION_MIN_MS, KICK_DURATION_MAX_MS, MIN_PWM_PERCENT);
+    printk("[INIT] Control timer %dms kick=%d-%dms hold=%d-%d%% (vel-adaptive)\n",
+           TIMER_PERIOD_MS, KICK_DURATION_MIN_MS, KICK_DURATION_MAX_MS,
+           MIN_PWM_PERCENT, HOLD_PWM_MAX_PERCENT);
 
     k_work_init(&solenoid_work, solenoid_work_handler);
     init_event_buffer(&event_buffer);
