@@ -13,3 +13,6 @@ If `west flash` is not working (e.g., due to missing `nrfutil`), you can use the
 ```
 This script uses `nrfjprog` to flash the `KDAA/merged.hex` file to the first connected J-Link probe.
 
+Demo av pianoet i action: 
+https://youtu.be/YUW1oRxf86I 
+https://youtu.be/Q4-6gi_OYgQ
